@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -26,7 +26,7 @@ export default function BotsPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [newBot, setNewBot] = useState({ botId: "", name: "", token: "" });
+  const [newBot, setNewBot] = useState({ token: "" });
   const [error, setError] = useState("");
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const router = useRouter();
@@ -65,7 +65,7 @@ export default function BotsPage() {
         return;
       }
       setShowAdd(false);
-      setNewBot({ botId: "", name: "", token: "" });
+      setNewBot({ token: "" });
       fetchBots();
     } catch {
       setError("网络错误");
@@ -251,29 +251,7 @@ export default function BotsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowAdd(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-lg font-bold text-[#171d26] mb-4">添加机器人</h2>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">机器人名称</label>
-                <input
-                  type="text"
-                  value={newBot.name}
-                  onChange={(e) => setNewBot({ ...newBot, name: e.target.value })}
-                  placeholder="如：糖糖小助手"
-                  className="w-full h-10 px-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">机器人 ID</label>
-                <input
-                  type="text"
-                  value={newBot.botId}
-                  onChange={(e) => setNewBot({ ...newBot, botId: e.target.value })}
-                  placeholder="KOOK 机器人 ID"
-                  className="w-full h-10 px-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                  required
-                />
-              </div>
+<form onSubmit={handleAdd} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Bot Token</label>
                 <input
@@ -284,7 +262,7 @@ export default function BotsPage() {
                   className="w-full h-10 px-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   required
                 />
-                <p className="text-xs text-slate-400 mt-1">在 KOOK 开发者平台获取 Bot Token，系统将自动验证其有效性</p>
+                <p className="text-xs text-slate-400 mt-1">在 KOOK 开发者平台获取 Bot Token，系统将自动验证并获取机器人信息</p>
               </div>
               {error && <div className="text-sm text-red-500 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
               <div className="flex gap-3 pt-2">

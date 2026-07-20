@@ -3,21 +3,55 @@ import { NextResponse } from "next/server";
 
 const JWT_SECRET = process.env.JWT_SECRET || "acbot-secret-key-change-in-production";
 
-function verifyTokenEdge(token: string): boolean {
+/**
+ * Edge-safe JWT verification using Web Crypto API.
+ * Verifies the HMAC-SHA256 signature (compatible with jsonwebtoken's HS256).
+ */
+async function verifyTokenEdge(token: string): Promise<boolean> {
   try {
-    // Simple JWT structure check without jwt library (Edge-safe)
     const parts = token.split(".");
     if (parts.length !== 3) return false;
 
-    // Decode payload
+    const [headerB64, payloadB64, signatureB64] = parts;
+
+    // Decode header to check algorithm
+    const header = JSON.parse(
+      Buffer.from(headerB64, "base64url").toString("utf-8")
+    );
+    if (header.alg !== "HS256") return false;
+
+    // Decode payload to check expiry
     const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf-8")
+      Buffer.from(payloadB64, "base64url").toString("utf-8")
+    );
+    if (payload.exp && Date.now() >= payload.exp * 1000) return false;
+    if (!payload.id) return false;
+
+    // Verify signature using Web Crypto API
+    const encoder = new TextEncoder();
+    const keyData = encoder.encode(JWT_SECRET);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      keyData,
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
     );
 
-    // Check expiry
-    if (payload.exp && Date.now() >= payload.exp * 1000) return false;
+    // The signed data is header.payload
+    const signedData = encoder.encode(`${headerB64}.${payloadB64}`);
 
-    return !!payload.id;
+    // Decode the signature from base64url
+    const signature = Buffer.from(signatureB64, "base64url");
+
+    const isValid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      signature,
+      signedData
+    );
+
+    return isValid;
   } catch {
     return false;
   }
@@ -55,7 +89,8 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
 
-    if (!verifyTokenEdge(token)) {
+    const valid = await verifyTokenEdge(token);
+    if (!valid) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json({ error: "登录已过期" }, { status: 401 });
       }

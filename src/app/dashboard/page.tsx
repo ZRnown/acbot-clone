@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { Sidebar } from "@/components/sidebar";
@@ -43,8 +43,33 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Auto-sync all bots on mount, then refresh stats
   useEffect(() => {
-    fetchStats();
+    (async () => {
+      setSyncing(true);
+      try {
+        // First fetch current stats to get bot list
+        const res = await fetch("/api/stats");
+        if (res.ok) {
+          const data = await res.json();
+          setStats(data);
+          // Refresh each valid bot in parallel
+          const validBots = (data.bots || []).filter((b: any) => b.tokenValid);
+          if (validBots.length > 0) {
+            await Promise.all(validBots.map((b: any) =>
+              fetch(`/api/bots/${b.id}/refresh`, { method: "POST" }).catch(() => {})
+            ));
+            // Re-fetch stats after sync
+            await fetchStats();
+          }
+        }
+      } finally {
+        setSyncing(false);
+      }
+    })();
+    // Auto-refresh every 5 minutes
+    const interval = setInterval(fetchStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [fetchStats]);
 
   const handleSyncAll = async () => {

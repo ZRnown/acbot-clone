@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -28,6 +28,9 @@ interface BotData {
   guildId: string;
   guildName: string;
   stats: { observe: number; send: number; gift: number };
+  memberCount: number;
+  channelCount: number;
+  serverCount: number;
   config: { displayName: string; avatar: string; personality: string };
   migration: {
     sourceGuildId: string;
@@ -171,20 +174,37 @@ export default function BotConfigPage() {
 
       const data = await res.json();
 
-      if (res.ok) {
-        setMigrationLog(data.log || []);
-        setMigrationResult(data.result || data);
-        if (!data.success && data.error) {
-          setError(data.error);
-        }
-      } else {
+      if (!res.ok) {
         setError(data.error || "迁移失败");
+        setMigrating(false);
+        return;
       }
+
+      // Poll for migration progress
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`/api/migrate?botId=${params.id}`);
+          const statusData = await statusRes.json();
+
+          setMigrationLog(statusData.log || []);
+
+          if (statusData.status === "completed" || statusData.status === "failed") {
+            clearInterval(pollInterval);
+            setMigrating(false);
+            if (statusData.status === "failed") {
+              setError("迁移失败，请查看日志");
+            } else {
+              setMigrationResult({ success: true });
+            }
+            fetchBot();
+          }
+        } catch {
+          // Ignore polling errors
+        }
+      }, 2000);
     } catch (e: any) {
       setError("网络错误: " + e.message);
-    } finally {
       setMigrating(false);
-      fetchBot();
     }
   };
 
@@ -249,9 +269,9 @@ export default function BotConfigPage() {
                   {bot.status === "online" ? "运行中" : "已离线"}
                 </span>
                 <div className="flex gap-2 text-xs">
-                  <span className="text-slate-500">观察 <b className="text-[#171d26]">{bot.stats.observe}</b></span>
-                  <span className="text-slate-500">发送 <b className="text-[#171d26]">{bot.stats.send}</b></span>
-                  <span className="text-slate-500">礼物 <b className="text-[#171d26]">{bot.stats.gift}</b></span>
+                  <span className="text-slate-500">成员数 <b className="text-[#171d26]">{bot.memberCount || 0}</b></span>
+                  <span className="text-slate-500">频道数 <b className="text-[#171d26]">{bot.channelCount || 0}</b></span>
+                  <span className="text-slate-500">服务器数 <b className="text-[#171d26]">{bot.serverCount || 0}</b></span>
                 </div>
                 <button
                   onClick={handleToggleStatus}
