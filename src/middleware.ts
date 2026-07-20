@@ -44,7 +44,6 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/bots") ||
     pathname.startsWith("/settings") ||
-    pathname.startsWith("/orders") ||
     pathname.startsWith("/api/")
   ) {
     const token = request.cookies.get("token")?.value;

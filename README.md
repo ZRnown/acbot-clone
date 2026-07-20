@@ -26,15 +26,36 @@ npm run start
 
 访问 http://localhost:3000
 
-## 服务器搬运功能说明
+默认账号: tangtang / tangtang127
 
-服务器搭建工具使用 KOOK HTTP API v3 实现以下功能：
+## 服务器搭建工具
 
-1. **频道分类**：`/api/v3/channel/create` (type=0 创建分类)
-2. **子频道**：`/api/v3/channel/create` (type=1 文字, type=2 语音)
-3. **角色**：`/api/v3/guild-role/create` 创建角色并设置权限
-4. **频道权限**：`/api/v3/channel-role/sync` 同步频道权限覆盖
-5. **表情包**：`/api/v3/guild-emoji/list` + `/create` 下载源表情并上传到目标
+### 支持的搬运功能
+
+1. **一键搬运频道** - 从源服务器复制频道结构到目标服务器
+   - 频道分类（Categories）
+   - 子频道（文字/语音）
+   - 角色权限
+   - 表情包（自动下载上传）
+
+2. **一键清空服务器** - 删除所有频道和角色
+3. **一键锁死/解锁** - 服务器权限管理
+4. **搬运卡片消息** - 转发含自定义表情的卡片消息
+5. **表情库上传** - 批量上传预设表情包
+
+### KOOK API 接口
+
+| 功能 | API 端点 |
+|------|----------|
+| 获取频道列表 | `/api/v3/channel/list` |
+| 创建频道/分类 | `/api/v3/channel/create` |
+| 编辑频道 | `/api/v3/channel/update` |
+| 删除频道 | `/api/v3/channel/delete` |
+| 获取表情列表 | `/api/v3/guild-emoji/list` |
+| 创建表情 | `/api/v3/guild-emoji/create` |
+| 角色管理 | `/api/v3/guild-role/*` |
+| 频道权限 | `/api/v3/channel-role/*` |
+| 服务器详情 | `/api/v3/guild/view` |
 
 ### 搬运顺序
 角色 → 分类 → 子频道 → 频道权限 → 表情包
@@ -49,17 +70,31 @@ npm run start
 
 ```bash
 # 在服务器上
-git clone https://github.com/JCodesMore/acbot-clone.git
-cd acbot-clone
+git clone https://github.com/ZRnown/acbot-clone.git /opt/acbot-clone
+cd /opt/acbot-clone
 npm install
 npm run build
+node scripts/init-db.js  # 初始化数据库（创建 tangtang 账号）
 pm2 start "npm run start" --name acbot-clone
 ```
 
 更新：
 ```bash
-git pull
+cd /opt/acbot-clone
+git pull origin main
 npm install
 npm run build
+node scripts/init-db.js  # 可选：重置密码
 pm2 restart acbot-clone
 ```
+
+## 环境变量
+
+```env
+JWT_SECRET=your-secret-key
+DATA_DIR=data
+```
+
+## License
+
+MIT

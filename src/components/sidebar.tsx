@@ -5,11 +5,9 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Bot,
-  Receipt,
   Settings,
   ChevronLeft,
   Wrench,
-  HelpCircle,
   LogOut,
   Menu,
   X,
@@ -26,7 +24,6 @@ interface NavItem {
 const mainNav: NavItem[] = [
   { label: "总览", href: "/dashboard", icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
   { label: "机器人", href: "/bots", icon: <Bot className="h-3.5 w-3.5" /> },
-  { label: "我的账单", href: "/orders", icon: <Receipt className="h-3.5 w-3.5" /> },
   { label: "设置", href: "/settings", icon: <Settings className="h-3.5 w-3.5" /> },
 ];
 
