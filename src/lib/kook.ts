@@ -56,6 +56,8 @@ export interface KookGuild {
   open_id: string;
   default_channel_id: string;
   welcome_channel_id: string;
+  user_count?: number;
+  online_count?: number;
 }
 
 async function kookRequest(token: string, endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -544,4 +546,93 @@ function sleep(ms: number): Promise<void> {
 // === Helper: Get user's guilds that the bot is in ===
 export async function getBotGuilds(token: string): Promise<KookGuild[]> {
   return getGuildList(token);
+}
+
+// === Bot Info & Stats ===
+
+export interface KookBotInfo {
+  id: string;
+  username: string;
+  avatar: string;
+  bot: boolean;
+  online: boolean;
+}
+
+/** Verify a bot token by calling /user/me — returns bot info if valid, throws if invalid */
+export async function getBotInfo(token: string): Promise<KookBotInfo> {
+  const data = await kookRequest(token, `/user/me`);
+  return {
+    id: data.id,
+    username: data.username,
+    avatar: data.avatar || "",
+    bot: data.bot ?? false,
+    online: data.online ?? false,
+  };
+}
+
+export interface BotStats {
+  serverCount: number;
+  memberCount: number;
+  channelCount: number;
+  guildDetails: Array<{
+    id: string;
+    name: string;
+    memberCount: number;
+    channelCount: number;
+    onlineUserCount: number;
+  }>;
+}
+
+/**
+ * Fetch real stats for a bot by aggregating across all its guilds.
+ * Calls /guild/list, then /guild/view for each guild to get member counts,
+ * and /channel/list for each guild to get channel counts.
+ */
+export async function getBotStats(token: string): Promise<BotStats> {
+  const guilds = await getGuildList(token);
+
+  const guildDetails: BotStats["guildDetails"] = [];
+
+  for (const guild of guilds) {
+    try {
+      // Get detailed guild info (includes member counts)
+      const guildDetail = await getGuild(token, guild.id);
+
+      // Get channel list for this guild
+      let channelCount = 0;
+      try {
+        const channels = await getChannelList(token, guild.id);
+        channelCount = channels.length;
+      } catch {
+        // If we can't get channels, skip
+      }
+
+      guildDetails.push({
+        id: guild.id,
+        name: guildDetail?.name || guild.name,
+        memberCount: guildDetail?.user_count ?? 0,
+        channelCount,
+        onlineUserCount: guildDetail?.online_count ?? 0,
+      });
+
+      // Rate limit: small delay between guilds
+      await sleep(300);
+    } catch {
+      // Skip guilds we can't access
+      guildDetails.push({
+        id: guild.id,
+        name: guild.name,
+        memberCount: 0,
+        channelCount: 0,
+        onlineUserCount: 0,
+      });
+    }
+  }
+
+  return {
+    serverCount: guilds.length,
+    memberCount: guildDetails.reduce((sum, g) => sum + g.memberCount, 0),
+    channelCount: guildDetails.reduce((sum, g) => sum + g.channelCount, 0),
+    guildDetails,
+  };
 }

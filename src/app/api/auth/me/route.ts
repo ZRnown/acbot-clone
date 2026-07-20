@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getUserById } from "@/lib/db";
 
-export async function GET() {
-  // This route is behind middleware, so token is valid
-  // But we re-verify to be safe
-  return NextResponse.json({ success: true });
-}
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get("token")?.value;
+  if (!token) return NextResponse.json({ error: "未登录" }, { status: 401 });
 
-export async function POST(req: NextRequest) {
-  try {
-    // Placeholder for password change via API if needed
-    return NextResponse.json({ success: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
+  const payload = verifyToken(token);
+  if (!payload) return NextResponse.json({ error: "登录已过期" }, { status: 401 });
+
+  const user = await getUserById(payload.id);
+  if (!user) return NextResponse.json({ error: "用户不存在" }, { status: 401 });
+
+  return NextResponse.json({
+    success: true,
+    user: { id: user.id, username: user.username, role: user.role },
+  });
 }

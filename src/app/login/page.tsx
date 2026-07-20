@@ -31,7 +31,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch {
       setError("网络错误，请重试");
     } finally {

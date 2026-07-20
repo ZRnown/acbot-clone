@@ -21,7 +21,23 @@ export interface Bot {
   guildId: string;
   guildName: string;
   token: string;
+  tokenValid: boolean;
   createdAt: string;
+  // Real stats from KOOK API
+  serverCount: number;
+  memberCount: number;
+  channelCount: number;
+  onlineUserCount: number;
+  lastSyncedAt: string;
+  // Historical snapshots for chart (max 30 entries, newest first)
+  statsHistory: Array<{
+    date: string;
+    serverCount: number;
+    memberCount: number;
+    channelCount: number;
+    onlineUserCount: number;
+  }>;
+  // Legacy stats (kept for backward compat, now populated from real data)
   stats: {
     observe: number;
     send: number;
@@ -143,7 +159,14 @@ export async function createBot(ownerId: string, data: Partial<Bot>): Promise<Bo
     guildId: data.guildId || "",
     guildName: data.guildName || "",
     token: data.token || "",
+    tokenValid: false,
     createdAt: new Date().toISOString(),
+    serverCount: 0,
+    memberCount: 0,
+    channelCount: 0,
+    onlineUserCount: 0,
+    lastSyncedAt: "",
+    statsHistory: [],
     stats: { observe: 0, send: 0, gift: 0 },
     config: {
       displayName: data.config?.displayName || "",
@@ -184,6 +207,50 @@ export async function updateBot(id: string, updates: Partial<Bot>): Promise<Bot 
     config: { ...db.bots[idx].config, ...(updates.config || {}) },
     migration: { ...db.bots[idx].migration, ...(updates.migration || {}) },
     stats: { ...db.bots[idx].stats, ...(updates.stats || {}) },
+  };
+
+  await writeDb(db);
+  return db.bots[idx];
+}
+
+/** Sync a bot's real stats from KOOK API and save a snapshot to history */
+export async function syncBotStats(id: string, stats: {
+  serverCount: number;
+  memberCount: number;
+  channelCount: number;
+  onlineUserCount: number;
+}): Promise<Bot | null> {
+  const db = await readDb();
+  const idx = db.bots.findIndex((b) => b.id === id);
+  if (idx === -1) return null;
+
+  const now = new Date();
+  const dateStr = now.toISOString();
+
+  db.bots[idx].serverCount = stats.serverCount;
+  db.bots[idx].memberCount = stats.memberCount;
+  db.bots[idx].channelCount = stats.channelCount;
+  db.bots[idx].onlineUserCount = stats.onlineUserCount;
+  db.bots[idx].lastSyncedAt = dateStr;
+  db.bots[idx].tokenValid = true;
+
+  // Add snapshot (keep last 30)
+  db.bots[idx].statsHistory.unshift({
+    date: dateStr,
+    serverCount: stats.serverCount,
+    memberCount: stats.memberCount,
+    channelCount: stats.channelCount,
+    onlineUserCount: stats.onlineUserCount,
+  });
+  if (db.bots[idx].statsHistory.length > 30) {
+    db.bots[idx].statsHistory = db.bots[idx].statsHistory.slice(0, 30);
+  }
+
+  // Update legacy stats to real channel count as message proxy
+  db.bots[idx].stats = {
+    observe: stats.memberCount,
+    send: stats.channelCount,
+    gift: stats.serverCount,
   };
 
   await writeDb(db);

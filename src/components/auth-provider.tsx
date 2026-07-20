@@ -29,21 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  useEffect(() => {
-    checkAuth();
-  }, [pathname]);
-
   const checkAuth = async () => {
     try {
       const res = await fetch("/api/auth/me", { credentials: "include" });
       if (res.ok) {
-        // We're authenticated - get user info from cookie
-        // The middleware validated the token, we just need username
-        const token = document.cookie.match(/token=([^;]+)/);
-        if (token) {
-          // Decode JWT payload to get username
-          const payload = JSON.parse(atob(token[1].split(".")[1]));
-          setUser({ id: payload.id, username: payload.username, role: payload.role });
+        const data = await res.json();
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          setUser(null);
         }
       } else {
         setUser(null);
@@ -54,6 +48,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    checkAuth();
+  }, [pathname]);
 
   const logout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
