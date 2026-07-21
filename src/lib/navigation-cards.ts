@@ -88,6 +88,13 @@ function findCreatedChannel(sourceName: string, channels: CreatedChannel[]) {
     });
 }
 
+function channelReference(channel: CreatedChannel | undefined, fallbackName: string) {
+  // KOOK channel mentions do not resolve for voice channels in KMarkdown.
+  return channel && (channel.type === 1 || channel.type === 4)
+    ? `(chn)${channel.id}(chn)`
+    : fallbackName;
+}
+
 function buildAdaptiveNavigation(
   template: ServerTemplate,
   serverName: string,
@@ -101,7 +108,7 @@ function buildAdaptiveNavigation(
     const lines = category.channels
       .map((source) => {
         const created = findCreatedChannel(source.name, channels);
-        return created ? skin.line(source.name, `(chn)${created.id}(chn)`) : "";
+        return created ? skin.line(source.name, channelReference(created, source.name)) : "";
       })
       .filter(Boolean);
     if (lines.length) blocks.push(skin.section(category.name.replaceAll("{name}", serverName)), lines.join("\n"));
@@ -121,7 +128,7 @@ function buildSourceNavigation(templateId: string, channels: CreatedChannel[]) {
       const sourceName = source.channelMap[oldId];
       if (!sourceName) return "";
       const created = findCreatedChannel(sourceName, channels);
-      return created ? `(chn)${created.id}(chn)` : sourceName;
+      return channelReference(created, sourceName);
     });
 }
 
