@@ -330,58 +330,58 @@ export default function BotDetailPage() {
         <div className="flex-1 overflow-y-auto p-6">
 
           {tab === "basic" && (
-            <div className="max-w-2xl space-y-6">
+            <div className="max-w-4xl space-y-5">
 
-              <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"><Server className="w-4 h-4 text-indigo-400" />\u670d\u52a1\u5668\u7ed1\u5b9a</h2>
+              <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#171d26] mb-4 flex items-center gap-2"><Server className="w-4 h-4 text-blue-600" />服务器绑定</h2>
                 <div>
-                  <label className="text-xs text-slate-500">\u9009\u62e9\u670d\u52a1\u5668</label>
+                  <label className="text-xs text-slate-500 mb-1.5 block">选择服务器</label>
                   {guildsLoading ? (
-                    <div className="flex items-center gap-2 text-slate-500 text-sm py-2"><Loader2 className="w-4 h-4 animate-spin" />\u52a0\u8f7d\u4e2d...</div>
+                    <div className="flex items-center gap-2 text-slate-500 text-sm py-2"><Loader2 className="w-4 h-4 animate-spin" />加载中...</div>
                   ) : guilds.length === 0 ? (
-                    <p className="text-sm text-slate-600 py-2">\u6682\u65e0\u53ef\u7528\u670d\u52a1\u5668\uff0c\u70b9\u51fb\u540c\u6b65\u5237\u65b0</p>
+                    <p className="text-sm text-slate-500 py-2">暂无可用服务器，点击右上角同步刷新</p>
                   ) : (
                     <select value={selGuildId} onChange={(e) => setSelGuildId(e.target.value)}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition">
-                      <option value="">-- \u672a\u7ed1\u5b9a --</option>
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-[#171d26] focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition">
+                      <option value="">-- 未绑定 --</option>
                       {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
                     </select>
                   )}
                 </div>
               </section>
 
-              <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"><Eye className="w-4 h-4 text-indigo-400" />\u5c55\u793a\u8bbe\u7f6e</h2>
+              <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#171d26] mb-4 flex items-center gap-2"><Eye className="w-4 h-4 text-blue-600" />展示设置</h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1.5">\u663e\u793a\u540d\u79f0</label>
+                    <label className="block text-xs text-slate-500 mb-1.5">显示名称</label>
                     <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder={bot.name}
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition" />
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-[#171d26] placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-1.5">\u5934\u50cf URL</label>
+                    <label className="block text-xs text-slate-500 mb-1.5">头像 URL</label>
                     <input type="text" value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://..."
-                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 transition" />
+                      className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-[#171d26] placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 transition" />
                   </div>
                 </div>
               </section>
 
-              <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-300 mb-4">\u673a\u5668\u4eba\u4fe1\u606f</h2>
+              <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-[#171d26] mb-4">机器人信息</h2>
                 <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="bg-slate-800/60 rounded-lg p-3"><p className="text-2xl font-bold text-white">{bot.memberCount || 0}</p><p className="text-xs text-slate-500 mt-1">\u6210\u5458</p></div>
-                  <div className="bg-slate-800/60 rounded-lg p-3"><p className="text-2xl font-bold text-white">{bot.channelCount || 0}</p><p className="text-xs text-slate-500 mt-1">\u9891\u9053</p></div>
-                  <div className="bg-slate-800/60 rounded-lg p-3"><p className="text-2xl font-bold text-white">{bot.serverCount || 0}</p><p className="text-xs text-slate-500 mt-1">\u670d\u52a1\u5668</p></div>
+                  <div className="bg-slate-50 border border-gray-200 rounded-lg p-4"><p className="text-2xl font-bold text-[#171d26]">{bot.memberCount || 0}</p><p className="text-xs text-slate-500 mt-1">成员</p></div>
+                  <div className="bg-slate-50 border border-gray-200 rounded-lg p-4"><p className="text-2xl font-bold text-[#171d26]">{bot.channelCount || 0}</p><p className="text-xs text-slate-500 mt-1">频道</p></div>
+                  <div className="bg-slate-50 border border-gray-200 rounded-lg p-4"><p className="text-2xl font-bold text-[#171d26]">{bot.serverCount || 0}</p><p className="text-xs text-slate-500 mt-1">服务器</p></div>
                 </div>
               </section>
 
               <div className="flex items-center gap-3">
                 <button onClick={saveConfig} disabled={savingCfg}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
-                  {savingCfg && <Loader2 className="w-4 h-4 animate-spin" />}\u4fdd\u5b58\u914d\u7f6e
+                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
+                  {savingCfg && <Loader2 className="w-4 h-4 animate-spin" />}保存配置
                 </button>
                 {cfgMsg && (
-                  <span className={`text-sm ${cfgMsg.ok ? "text-green-400" : "text-red-400"}`}>
+                  <span className={`text-sm ${cfgMsg.ok ? "text-green-600" : "text-red-600"}`}>
                     {cfgMsg.ok ? <CheckCircle2 className="w-4 h-4 inline mr-1" /> : <AlertCircle className="w-4 h-4 inline mr-1" />}{cfgMsg.text}
                   </span>
                 )}
@@ -393,24 +393,25 @@ export default function BotDetailPage() {
           {tab === "emoji" && (
             <div className="space-y-5">
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 {(Object.keys(EMOJI_CAT) as string[]).map((cat) => (
                   <button key={cat} onClick={() => setEmojiFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiFilter === cat ? "bg-indigo-600 text-white" : "bg-slate-800 text-slate-400 hover:text-slate-200"}`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiFilter === cat ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26]"}`}
                   >{EMOJI_CAT[cat]}</button>
                 ))}
                 <div className="flex-1" />
-                <button onClick={selectAllEmojis} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white transition">\u5168\u9009</button>
-                <button onClick={clearEmojiSelection} className="px-3 py-1.5 text-xs rounded-lg bg-slate-800 text-slate-400 hover:text-white transition">\u6e05\u9664</button>
-                <span className="text-xs text-slate-600">{emojiSelected.size} \u5df2\u9009</span>
+                <button onClick={selectAllEmojis} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26] transition">全选</button>
+                <button onClick={clearEmojiSelection} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26] transition">清除</button>
+                <span className="text-xs text-slate-500">{emojiSelected.size} 已选</span>
               </div>
 
               {emojiLoading ? (
                 <div className="flex items-center justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-slate-500" /></div>
               ) : emojis.length === 0 ? (
-                <div className="text-center py-12 text-slate-600">
-                  <Image className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">\u8be5\u5206\u7c7b\u6682\u65e0\u8868\u60c5\uff0c\u8bf7\u5c06\u56fe\u7247\u653e\u5165 public/emoji-library/ \u76ee\u5f55</p>
+                <div className="bg-white border border-gray-200 rounded-xl text-center py-14 text-slate-500 shadow-sm">
+                  <Image className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+                  <p className="text-sm font-medium text-[#171d26]">该分类暂无表情</p>
+                  <p className="text-xs text-slate-500 mt-1">换个分类看看，或稍后再回来选择。</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
@@ -419,12 +420,12 @@ export default function BotDetailPage() {
                     const thumbUrl = `/api/emoji-library/thumb/${emoji.category}/${emoji.id}`;
                     return (
                       <button key={emoji.id} onClick={() => toggleEmoji(emoji.id)}
-                        className={`relative aspect-square rounded-lg border-2 overflow-hidden transition-all ${sel ? "border-indigo-500 ring-2 ring-indigo-500/30 scale-95" : "border-transparent hover:border-slate-600"}`}
+                        className={`relative aspect-square rounded-lg border-2 overflow-hidden transition-all bg-white ${sel ? "border-blue-500 ring-2 ring-blue-500/20 scale-95" : "border-gray-200 hover:border-blue-300"}`}
                         title={emoji.name}
                       >
-                        <img src={thumbUrl} alt={emoji.name} className="w-full h-full object-contain bg-slate-800/80" />
+                        <img src={thumbUrl} alt={emoji.name} className="w-full h-full object-contain bg-slate-50" />
                         {sel && (
-                          <div className="absolute inset-0 bg-indigo-600/30 flex items-center justify-center">
+                          <div className="absolute inset-0 bg-blue-600/20 flex items-center justify-center">
                             <CheckCircle2 className="w-5 h-5 text-white" />
                           </div>
                         )}
@@ -435,26 +436,26 @@ export default function BotDetailPage() {
               )}
 
               {emojiSelected.size > 0 && (
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-slate-300">\u4e0a\u4f20\u5230\u670d\u52a1\u5668</h3>
+                <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
+                  <h3 className="text-sm font-semibold text-[#171d26]">上传到服务器</h3>
                   <div className="flex flex-wrap gap-3 items-end">
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">\u76ee\u6807\u670d\u52a1\u5668</label>
+                      <label className="block text-xs text-slate-500 mb-1">目标服务器</label>
                       <select value={emojiUpGuildId} onChange={(e) => setEmojiUpGuildId(e.target.value)}
-                        className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                        <option value="">-- \u9009\u62e9\u670d\u52a1\u5668 --</option>
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] focus:outline-none focus:border-blue-500">
+                        <option value="">-- 选择服务器 --</option>
                         {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">\u540d\u79f0\u524d\u7f00 (\u53ef\u9009)</label>
-                      <input type="text" value={emojiPrefix} onChange={(e) => setEmojiPrefix(e.target.value)} placeholder="\u4f8b: mybot_"
-                        className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 w-32 focus:outline-none focus:border-indigo-500" />
+                      <label className="block text-xs text-slate-500 mb-1">名称前缀（可选）</label>
+                      <input type="text" value={emojiPrefix} onChange={(e) => setEmojiPrefix(e.target.value)} placeholder="例: mybot_"
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] w-32 focus:outline-none focus:border-blue-500" />
                     </div>
                     <button onClick={uploadEmojis} disabled={emojiUploading || !emojiUpGuildId}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
                       {emojiUploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                      {emojiUploading ? "\u4e0a\u4f20\u4e2d..." : `\u4e0a\u4f20 ${emojiSelected.size} \u4e2a\u8868\u60c5`}
+                      {emojiUploading ? "上传中..." : `上传 ${emojiSelected.size} 个表情`}
                     </button>
                   </div>
 
