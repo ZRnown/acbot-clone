@@ -14,10 +14,17 @@ let connected = false;
 // SDK's gateway/heartbeat implementation but skip that obsolete transition.
 client.API.user.offline = async () => ({ data: undefined, err: undefined });
 
+async function getOnlineStatus() {
+  const response = await fetch("https://www.kookapp.cn/api/v3/user/get-online-status", {
+    headers: { Authorization: `Bot ${token}` },
+  });
+  const body = await response.json();
+  return body.code === 0 && body.data?.online === true;
+}
+
 client.on("connect.websocket", async (event) => {
   for (let attempt = 0; attempt < 20; attempt++) {
-    const { data, err } = await client.API.user.me();
-    if (!err && data && data.online === true) {
+    if (await getOnlineStatus()) {
       connected = true;
       if (process.send) {
         process.send({
@@ -30,7 +37,7 @@ client.on("connect.websocket", async (event) => {
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
-  if (process.send) process.send({ type: "error", error: "Gateway 已连接，但 KOOK 仍报告机器人离线" });
+  if (process.send) process.send({ type: "error", error: "Gateway 已连接，但 KOOK 在线状态接口仍报告机器人离线" });
 });
 
 const shutdown = () => process.exit(0);
