@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
-import { getAllEmojis, getChannelList, getGuild } from "@/lib/kook";
+import { getAllChannelList, getAllEmojis, getGuild } from "@/lib/kook";
 
 type ImportedEmoji = { name: string; url: string };
 
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
     }
 
     const [channels, guild, emojiItems] = await Promise.all([
-      getChannelList(bot.token, guildId),
+      getAllChannelList(bot.token, guildId),
       getGuild(bot.token, guildId),
       getAllEmojis(bot.token, guildId).catch(() => []),
     ]);

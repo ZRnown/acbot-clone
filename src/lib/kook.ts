@@ -93,8 +93,23 @@ export async function getGuildList(token: string): Promise<KookGuild[]> {
 
 // === Channels & Categories ===
 export async function getChannelList(token: string, guildId: string): Promise<KookChannel[]> {
-  const data = await kookRequest(token, `/channel/list?guild_id=${guildId}`);
+  const data = await kookRequest(token, `/channel/list?guild_id=${guildId}&page=1&page_size=50`);
   return data.items || [];
+}
+
+export async function getAllChannelList(token: string, guildId: string): Promise<KookChannel[]> {
+  const all: KookChannel[] = [];
+  let page = 1;
+  let total = Infinity;
+  while (all.length < total) {
+    const data = await kookRequest(token, `/channel/list?guild_id=${guildId}&page=${page}&page_size=50`);
+    const items = data.items || [];
+    all.push(...items);
+    total = data.meta?.total ?? all.length;
+    if (items.length === 0 || items.length < 50) break;
+    page++;
+  }
+  return all;
 }
 
 export async function createChannel(

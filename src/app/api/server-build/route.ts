@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel, createEmoji, deleteChannel, getChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
+import { createChannel, createEmoji, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
 import { buildNavigationCard } from "@/lib/navigation-cards";
 
 const buildProgress = new Map<string, {
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "请至少配置一个有效分组" }, { status: 400 });
     }
 
-    const existingChannels = body.clearExisting === false ? [] : await getChannelList(bot.token, guildId);
+    const existingChannels = body.clearExisting === false ? [] : await getAllChannelList(bot.token, guildId);
     const totalActions = existingChannels.length + template.categories.reduce(
       (sum, cat) => sum + 1 + cat.channels.length,
       0
@@ -155,6 +155,10 @@ export async function POST(req: NextRequest) {
             }
             progress.current++;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+          const remainingChannels = await getAllChannelList(bot.token, guildId);
+          if (remainingChannels.length > 0) {
+            throw new Error(`\u76ee\u6807\u670d\u52a1\u5668\u4ecd\u6709 ${remainingChannels.length} \u4e2a\u9891\u9053/\u5206\u7ec4\u672a\u5220\u9664\uff0c\u5df2\u505c\u6b62\u642d\u5efa`);
           }
         }
 
