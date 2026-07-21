@@ -155,6 +155,17 @@ export function buildNavigationCard(
     content = buildAdaptiveNavigation(template, serverName, "eng:starry", channels);
   }
 
+  // Imported navigation templates may already contain a complete KOOK card array.
+  // Return that card structure directly instead of displaying its JSON as KMarkdown.
+  if (content.trimStart().startsWith("[")) {
+    try {
+      const cards = JSON.parse(content);
+      if (Array.isArray(cards)) return cards;
+    } catch {
+      // Fall through to a plain KMarkdown card for malformed legacy templates.
+    }
+  }
+
   return [{
     type: "card",
     theme: "invisible",

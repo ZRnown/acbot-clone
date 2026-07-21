@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        for (const cat of template.categories) {
+        for (const [categoryIndex, cat] of template.categories.entries()) {
           const categoryName = decorateCategoryName(
             cat.name.replaceAll("{name}", body.serverName?.trim() || template.name),
             body.decorationStyleId
@@ -171,13 +171,13 @@ export async function POST(req: NextRequest) {
               categoryName,
               0,
               undefined,
-              undefined
+              categoryIndex
             );
             categoriesCreated++;
             progress.current = existingChannels.length + categoriesCreated + channelsCreated;
             progress.step = `创建分组: ${categoryName}`;
 
-            for (const ch of cat.channels) {
+            for (const [channelIndex, ch] of cat.channels.entries()) {
               try {
                 addLog("info", `创建频道: ${ch.name}`);
                 const createdChannel = await createChannel(
@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
                   ch.name,
                   ch.type,
                   catChannel.id,
-                  undefined
+                  channelIndex
                 );
                 createdChannels.push({ id: createdChannel.id, name: ch.name, type: ch.type });
                 channelsCreated++;
