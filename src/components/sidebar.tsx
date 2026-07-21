@@ -39,12 +39,12 @@ export function Sidebar({ children }: { children: ReactNode }) {
     return pathname === href;
   };
 
-  const navLink = (item: NavItem, isSubItem = false) => (
+  const navLink = (item: NavItem) => (
     <a
       key={item.href}
       href={item.href}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] transition-all duration-150 group/nav",
+        "relative flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] transition-all duration-150 group/nav",
         isActive(item.href)
           ? "bg-white/10 font-medium text-white"
           : "text-slate-400 hover:bg-white/6 hover:text-slate-200"
@@ -55,22 +55,21 @@ export function Sidebar({ children }: { children: ReactNode }) {
       </span>
       <span className="flex-1">{item.label}</span>
       {isActive(item.href) && (
-        <span className="absolute right-2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-blue-400 top-1/2" />
+        <span className="absolute right-2 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-blue-400" />
       )}
     </a>
   );
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      {/* Mobile hamburger */}
       <button
         onClick={() => setMobileOpen(true)}
         className="md:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-white shadow"
+        aria-label="打开菜单"
       >
         <Menu className="h-5 w-5" />
       </button>
 
-      {/* Mobile overlay */}
       {mobileOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black/50 z-40"
@@ -78,7 +77,6 @@ export function Sidebar({ children }: { children: ReactNode }) {
         />
       )}
 
-      {/* Sidebar */}
       <aside
         className={cn(
           "fixed md:relative inset-y-0 left-0 z-50 w-52 shrink-0 flex flex-col h-full transition-transform duration-200",
@@ -89,7 +87,6 @@ export function Sidebar({ children }: { children: ReactNode }) {
           background: "linear-gradient(rgb(15, 27, 45) 0%, rgb(10, 22, 40) 100%)",
         }}
       >
-        {/* Logo */}
         <div className="flex items-center gap-3 px-4 h-[60px] border-b border-white/5 shrink-0">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm">
             A
@@ -100,16 +97,15 @@ export function Sidebar({ children }: { children: ReactNode }) {
           <button
             onClick={() => setMobileOpen(false)}
             className="ml-auto md:hidden text-slate-500 hover:text-slate-300"
+            aria-label="关闭菜单"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Nav */}
         <nav className="sidebar-scroll flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0.5">
           {mainNav.map((item) => navLink(item))}
 
-          {/* System Tools Section */}
           <div className="px-3 pt-4 pb-1.5">
             <span className="text-[10px] font-semibold text-slate-500 tracking-[0.1em] uppercase select-none">
               系统工具
@@ -135,7 +131,7 @@ export function Sidebar({ children }: { children: ReactNode }) {
                 href="/bots"
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg px-3 py-1.5 text-[13px] transition-all duration-150",
-                  pathname.includes("/bots/") && pathname.includes("build")
+                  pathname.startsWith("/bots")
                     ? "bg-white/10 font-medium text-white"
                     : "text-slate-400 hover:bg-white/6 hover:text-slate-200"
                 )}
@@ -149,7 +145,6 @@ export function Sidebar({ children }: { children: ReactNode }) {
           )}
         </nav>
 
-        {/* User section */}
         <div className="border-t border-white/5 px-2 py-2 shrink-0">
           <div className="flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/6 transition-colors cursor-pointer">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
@@ -174,7 +169,6 @@ export function Sidebar({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0">
         {children}
       </div>

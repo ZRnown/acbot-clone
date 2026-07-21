@@ -4,9 +4,10 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import {
-  ChevronLeft, Wrench, Bot as BotIcon, RefreshCw, Power, PowerOff,
+  ChevronLeft, Bot as BotIcon, RefreshCw, Power, PowerOff,
   CheckCircle2, AlertCircle, Loader2,
-  Upload, Eye, Server, Play, Copy, Image, Clock,
+  Eye, Server, Play, Image,
+  Hash, Volume2, Database, ArrowRight, ClipboardList,
 } from "lucide-react";
 
 interface BotData {
@@ -29,12 +30,18 @@ interface EmojiItem { id: string; name: string; category: string; filename: stri
 interface EmojiCat { key: string; label: string; count: number; }
 interface TplItem {
   id: string; name: string; description: string; source?: string;
-  categoryCount: number; channelCount: number;
+  categoryCount?: number; channelCount?: number; groups?: number; channels?: number;
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
 
 type TabKey = "basic" | "emoji" | "build";
+type BuildRequestBody = {
+  botId: string;
+  guildId: string;
+  templateId?: string;
+  structure?: TplCategory[];
+};
 
 const TAB_LABELS: Record<TabKey, string> = {
   basic: "\u57fa\u672c\u4fe1\u606f",
@@ -89,6 +96,7 @@ export default function BotDetailPage() {
   const [buildLoading, setBuildLoading] = useState(false);
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildProg, setBuildProg] = useState<BuildProg | null>(null);
+  const [importStructure, setImportStructure] = useState<TplCategory[] | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
@@ -214,29 +222,47 @@ export default function BotDetailPage() {
         body: JSON.stringify({ botId: bot.id, guildIdOrUrl: importUrl.trim() }),
       });
       const data = await res.json();
-      if (data.success) setImportResult({ structure: data.structure, guildId: data.guildId });
+      if (data.success) {
+        setImportResult({ structure: data.structure, guildId: data.guildId });
+        setImportStructure(data.structure || []);
+        setSelTemplate(null);
+      }
     } catch { /* ignore */ }
     finally { setImportLoading(false); }
   };
 
   const startBuild = async () => {
-    if (!bot || !buildGuildId) return;
+    if (!bot || !buildGuildId || (!selTemplate && !importResult)) return;
     setBuildLoading(true); setBuildProg(null); setBuildJobId(null);
     try {
-      const body: any = { botId: bot.id, guildId: buildGuildId };
+      const body: BuildRequestBody = { botId: bot.id, guildId: buildGuildId };
       if (selTemplate) body.templateId = selTemplate.id;
-      else if (importResult) body.structure = importResult.structure;
+      if (importResult) body.structure = importResult.structure;
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
-      if (data.jobId) { setBuildJobId(data.jobId); startPolling(data.jobId); }
+      const jobId = data.jobId || data.buildId;
+      if (jobId) { setBuildJobId(jobId); startPolling(jobId); }
+      else setBuildLoading(false);
     } catch { setBuildLoading(false); }
   };
 
   const startPolling = (jobId: string) => {
     const poll = setInterval(async () => {
       try {
-        const res = await fetch(`/api/server-build?jobId=${jobId}`);
-        if (res.ok) { const d = await res.json(); setBuildProg(d); if (d.status === "completed" || d.status === "failed") { clearInterval(poll); setBuildLoading(false); } }
+        const res = await fetch(`/api/server-build?buildId=${jobId}`);
+        if (res.ok) {
+          const d = await res.json();
+          setBuildProg({
+            status: d.status,
+            progress: d.progress ?? (d.total ? d.current / d.total : 0),
+            currentStep: d.currentStep || d.step || "",
+            log: d.log || [],
+          });
+          if (d.status === "completed" || d.status === "failed") {
+            clearInterval(poll);
+            setBuildLoading(false);
+          }
+        }
       } catch { /* ignore */ }
     }, 1000);
     pollRef.current = poll;
@@ -269,34 +295,34 @@ export default function BotDetailPage() {
     <Sidebar>
       <div className="flex-1 flex flex-col min-w-0">
 
-        <header className="flex items-center gap-3 px-6 py-4 border-b border-slate-800/60 bg-[#0d1319] shrink-0">
-          <button onClick={() => router.push("/bots")} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        <header className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 bg-white shrink-0">
+          <button onClick={() => router.push("/bots")} className="p-1.5 rounded-lg text-slate-400 hover:text-[#171d26] hover:bg-slate-100 transition">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-sm">
             {bot.config?.avatar ? <img src={bot.config.avatar} className="w-full h-full rounded-xl object-cover" alt="" /> : <BotIcon className="w-5 h-5 text-white" />}
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-base font-semibold text-white truncate">{bot.config?.displayName || bot.name}</h1>
-            <p className="text-xs text-slate-500 truncate">{bot.guildName || "\u672a\u7ed1\u5b9a"} \u00b7 {bot.memberCount || 0} \u6210\u5458</p>
+            <h1 className="text-base font-semibold text-[#171d26] truncate">{bot.config?.displayName || bot.name}</h1>
+            <p className="text-xs text-slate-500 truncate">{bot.guildName || "未绑定"} · {bot.memberCount || 0} 成员</p>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={syncStats} disabled={syncing} className="p-2 rounded-lg text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition disabled:opacity-50" title="\u540c\u6b65\u6570\u636e">
+            <button onClick={syncStats} disabled={syncing} className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition disabled:opacity-50" title="同步数据">
               <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
             </button>
             <button onClick={toggleStatus} disabled={toggling}
-              className={`p-2 rounded-lg transition disabled:opacity-50 ${bot.status === "online" ? "text-green-400 hover:text-green-300 hover:bg-green-500/10" : "text-slate-500 hover:text-slate-300 hover:bg-slate-800"}`}
-              title={bot.status === "online" ? "\u7ebf\u4e0a \u00b7 \u70b9\u51fb\u4e0b\u7ebf" : "\u79bb\u7ebf \u00b7 \u70b9\u51fb\u4e0a\u7ebf"}
+              className={`p-2 rounded-lg transition disabled:opacity-50 ${bot.status === "online" ? "text-green-600 hover:text-green-500 hover:bg-green-50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`}
+              title={bot.status === "online" ? "线上 · 点击下线" : "离线 · 点击上线"}
             >
               {bot.status === "online" ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
             </button>
           </div>
         </header>
 
-        <nav className="flex gap-0 px-6 border-b border-slate-800/60 bg-[#0d1319] shrink-0">
+        <nav className="flex gap-0 px-6 border-b border-gray-200 bg-white shrink-0">
           {(Object.keys(TAB_LABELS) as TabKey[]).map((k) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-all ${tab === k ? "border-indigo-500 text-indigo-400 bg-indigo-500/5" : "border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600"}`}
+              className={`px-5 py-3 text-sm font-medium border-b-2 transition-all ${tab === k ? "border-blue-600 text-blue-600 bg-blue-50/60" : "border-transparent text-slate-500 hover:text-[#171d26] hover:border-gray-300"}`}
             >{TAB_LABELS[k]}</button>
           ))}
         </nav>
@@ -457,89 +483,204 @@ export default function BotDetailPage() {
 
 
           {tab === "build" && (
-            <div className="space-y-5 max-w-3xl">
+            <div className="grid grid-cols-1 xl:grid-cols-[1.18fr_0.82fr] gap-5">
+              <div className="space-y-5">
+                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h2 className="text-sm font-semibold text-[#171d26] flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-blue-600" />
+                        选择模板
+                      </h2>
+                      <p className="text-xs text-slate-500 mt-1">先选一个模板，或者从现有 KOOK 服务器导入结构。</p>
+                    </div>
+                    <span className="text-xs text-slate-400">{templates.length + (userTpls.length || 0)} 个可用模板</span>
+                  </div>
 
-              <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"><Copy className="w-4 h-4 text-indigo-400" />\u9009\u62e9\u6a21\u677f\u6216\u5bfc\u5165</h2>
-
-                <div className="mb-4">
-                  <label className="text-xs text-slate-500 mb-2 block">\u9884\u8bbe\u6a21\u677f</label>
                   {tplLoading ? (
-                    <div className="flex items-center gap-2 text-slate-500 text-sm"><Loader2 className="w-4 h-4 animate-spin" />\u52a0\u8f7d\u4e2d...</div>
+                    <div className="flex items-center gap-2 text-slate-500 text-sm py-8">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      模板加载中...
+                    </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                      {templates.map((tpl) => (
-                        <button key={tpl.id} onClick={() => { setSelTemplate(tpl); setImportResult(null); }}
-                          className={`text-left p-3 rounded-lg border transition ${selTemplate?.id === tpl.id ? "border-indigo-500 bg-indigo-500/10" : "border-slate-700 hover:border-slate-500 bg-slate-800/60"}`}
-                        >
-                          <p className="text-sm font-medium text-slate-200 truncate">{tpl.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{tpl.description}</p>
-                          <div className="flex gap-3 mt-1.5 text-xs text-slate-600"><span>{tpl.categoryCount} \u5206\u7c7b</span><span>{tpl.channelCount} \u9891\u9053</span></div>
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {templates.map((tpl) => {
+                        const categoryCount = tpl.categoryCount ?? tpl.groups ?? 0;
+                        const channelCount = tpl.channelCount ?? tpl.channels ?? 0;
+                        const active = selTemplate?.id === tpl.id;
+                        return (
+                          <button
+                            key={tpl.id}
+                            onClick={() => {
+                              setSelTemplate(tpl);
+                              setImportResult(null);
+                              setImportStructure(null);
+                            }}
+                            className={`text-left rounded-xl border p-4 transition ${active ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300 hover:bg-slate-50"}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[#171d26] truncate">{tpl.name}</p>
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{tpl.description}</p>
+                              </div>
+                              {active && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />}
+                            </div>
+                            <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
+                              <span className="inline-flex items-center gap-1"><Hash className="w-3.5 h-3.5" />{categoryCount} 分类</span>
+                              <span className="inline-flex items-center gap-1"><Volume2 className="w-3.5 h-3.5" />{channelCount} 频道</span>
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
-                </div>
+                </section>
 
-                <div className="border-t border-slate-800 pt-4">
-                  <label className="text-xs text-slate-500 mb-2 block">\u6216\u4ece KOOK \u670d\u52a1\u5668\u5bfc\u5165</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="\u670d\u52a1\u5668\u94fe\u63a5\u6216 ID"
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-indigo-500" />
-                    <button onClick={importServer} disabled={importLoading || !importUrl.trim()}
-                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg text-sm font-medium text-slate-200 transition flex items-center gap-2">
-                      {importLoading && <Loader2 className="w-4 h-4 animate-spin" />}\u5bfc\u5165
+                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Database className="w-4 h-4 text-blue-600" />
+                    <h2 className="text-sm font-semibold text-[#171d26]">导入结构</h2>
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <input
+                      type="text"
+                      value={importUrl}
+                      onChange={(e) => setImportUrl(e.target.value)}
+                      placeholder="服务器链接或 ID"
+                      className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
+                    />
+                    <button
+                      onClick={importServer}
+                      disabled={importLoading || !importUrl.trim()}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
+                    >
+                      {importLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      导入
                     </button>
                   </div>
-                  {importResult && (
-                    <div className="mt-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-sm text-green-400">
-                      \u5df2\u5bfc\u5165 {importResult.structure.length} \u4e2a\u5206\u7c7b\uff0c\u5171\u8ba1 {importResult.structure.reduce((s: number, c: any) => s + c.channels.length, 0)} \u4e2a\u9891\u9053
+
+                  <div className="mt-4 rounded-xl border border-dashed border-gray-200 bg-slate-50 p-4">
+                    {importResult ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-[#171d26]">已导入结构</p>
+                          <span className="text-xs text-slate-500">{importResult.structure.length} 个分组</span>
+                        </div>
+                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                          {importResult.structure.map((group) => (
+                            <div key={group.name} className="rounded-lg border border-gray-200 bg-white p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-[#171d26] truncate">{group.name}</p>
+                                <span className="text-xs text-slate-500">{group.channels.length} 个频道</span>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {group.channels.slice(0, 6).map((ch) => (
+                                  <span key={`${group.name}-${ch.name}`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                                    {ch.type === 2 ? <Volume2 className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
+                                    {ch.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : importStructure ? (
+                      <p className="text-sm text-slate-500">已缓存导入结构，等待执行搭建。</p>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <ArrowRight className="w-4 h-4" />
+                        导入后会在这里显示完整频道骨架。
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-5">
+                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Play className="w-4 h-4 text-blue-600" />
+                    <h2 className="text-sm font-semibold text-[#171d26]">执行搭建</h2>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-slate-500 mb-1">目标服务器</label>
+                      <select
+                        value={buildGuildId}
+                        onChange={(e) => setBuildGuildId(e.target.value)}
+                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] focus:outline-none focus:border-blue-500"
+                      >
+                        <option value="">-- 选择服务器 --</option>
+                        {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
+                      </select>
                     </div>
+
+                    <button
+                      onClick={startBuild}
+                      disabled={buildLoading || !buildGuildId || (!selTemplate && !importResult)}
+                      className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
+                    >
+                      {buildLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {buildLoading ? "搭建中..." : "开始搭建"}
+                    </button>
+
+                    {selTemplate && (
+                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-[#171d26]">
+                        <div className="font-medium">{selTemplate.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {selTemplate.categoryCount ?? selTemplate.groups ?? 0} 分类 · {selTemplate.channelCount ?? selTemplate.channels ?? 0} 频道
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <h2 className="text-sm font-semibold text-[#171d26]">进度日志</h2>
+                    {buildJobId && <span className="text-xs text-slate-500">{buildJobId}</span>}
+                  </div>
+
+                  {buildProg ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${buildProg.status === "completed" ? "bg-emerald-500" : buildProg.status === "failed" ? "bg-red-500" : "bg-blue-600"}`}
+                            style={{ width: `${Math.round(buildProg.progress * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-xs text-slate-500 w-10 text-right">
+                          {Math.round(buildProg.progress * 100)}%
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600">{buildProg.currentStep}</p>
+                      <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl border border-gray-200 bg-slate-50 p-3">
+                        {buildProg.log?.map((l, i) => (
+                          <p key={i} className="text-xs text-slate-500 font-mono leading-5">
+                            {l.time} {l.message}
+                          </p>
+                        ))}
+                      </div>
+                      {buildProg.status === "completed" && (
+                        <div className="flex items-center gap-2 text-emerald-600 text-sm">
+                          <CheckCircle2 className="w-4 h-4" />
+                          服务器搭建完成
+                        </div>
+                      )}
+                      {buildProg.status === "failed" && (
+                        <div className="flex items-center gap-2 text-red-600 text-sm">
+                          <AlertCircle className="w-4 h-4" />
+                          搭建失败
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">尚未开始执行。</p>
                   )}
-                </div>
-              </section>
-
-              <section className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-                <h2 className="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2"><Play className="w-4 h-4 text-indigo-400" />\u6267\u884c\u642d\u5efa</h2>
-                <div className="flex flex-wrap gap-3 items-end">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">\u76ee\u6807\u670d\u52a1\u5668</label>
-                    <select value={buildGuildId} onChange={(e) => setBuildGuildId(e.target.value)}
-                      className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
-                      <option value="">-- \u9009\u62e9\u670d\u52a1\u5668 --</option>
-                      {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-                    </select>
-                  </div>
-                  <button onClick={startBuild} disabled={buildLoading || !buildGuildId || (!selTemplate && !importResult)}
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
-                    {buildLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {buildLoading ? "\u642d\u5efa\u4e2d..." : "\u5f00\u59cb\u642d\u5efa"}
-                  </button>
-                </div>
-
-                {buildProg && (
-                  <div className="mt-4 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className={`h-full transition-all duration-500 rounded-full ${buildProg.status === "completed" ? "bg-green-500" : buildProg.status === "failed" ? "bg-red-500" : "bg-indigo-500"}`} style={{ width: `${Math.round(buildProg.progress * 100)}%` }} />
-                      </div>
-                      <span className="text-xs text-slate-500 w-10 text-right">{Math.round(buildProg.progress * 100)}%</span>
-                    </div>
-                    <p className="text-sm text-slate-400">{buildProg.currentStep}</p>
-                    {buildProg.log && buildProg.log.length > 0 && (
-                      <div className="max-h-40 overflow-y-auto space-y-1 bg-slate-800/50 rounded-lg p-3">
-                        {buildProg.log.map((l: any, i: number) => (<p key={i} className="text-xs text-slate-500 font-mono">{l.time} {l.message}</p>))}
-                      </div>
-                    )}
-                    {buildProg.status === "completed" && (
-                      <div className="flex items-center gap-2 text-green-400 text-sm"><CheckCircle2 className="w-4 h-4" />\u670d\u52a1\u5668\u642d\u5efa\u5b8c\u6210\uff01</div>
-                    )}
-                    {buildProg.status === "failed" && (
-                      <div className="flex items-center gap-2 text-red-400 text-sm"><AlertCircle className="w-4 h-4" />\u642d\u5efa\u5931\u8d25</div>
-                    )}
-                  </div>
-                )}
-              </section>
+                </section>
+              </div>
             </div>
           )}
 
