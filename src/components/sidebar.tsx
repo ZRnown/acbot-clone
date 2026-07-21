@@ -169,7 +169,7 @@ export function Sidebar({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex min-h-0 min-w-0 flex-col overflow-hidden">
         {children}
       </div>
     </div>
