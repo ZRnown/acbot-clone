@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
-import { ALL_TEMPLATES } from "@/lib/server-templates";
+import { ALL_TEMPLATES, ServerTemplate } from "@/lib/server-templates";
 import { createChannel } from "@/lib/kook";
-import { ServerTemplate } from "@/lib/server-templates";
 
 const buildProgress = new Map<string, {
   status: string;
@@ -13,8 +12,63 @@ const buildProgress = new Map<string, {
   result?: unknown;
 }>();
 
+type BuildBody = {
+  botId: string;
+  guildId: string;
+  templateId?: string;
+  templateData?: ServerTemplate;
+  structure?: ServerTemplate["categories"];
+  serverName?: string;
+  duration?: string;
+  sendWithUser?: boolean;
+};
+
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
+  const structure = body.structure?.length ? body.structure : undefined;
+  let template: ServerTemplate | undefined;
+
+  if (structure) {
+    template = {
+      id: "configured-structure",
+      name: body.serverName?.trim() || "自定义服务器结构",
+      description: "从页面编辑器提交的 KOOK 频道结构",
+      categories: structure,
+    };
+  } else if (body.templateData) {
+    template = body.templateData;
+  } else if (body.templateId) {
+    template = ALL_TEMPLATES.find((t) => t.id === body.templateId);
+  }
+
+  if (!template) return undefined;
+
+  const categories = template.categories
+    .map((cat) => ({
+      name: cat.name?.trim(),
+      channels: (cat.channels || [])
+        .map((ch) => ({
+          ...ch,
+          name: ch.name?.trim(),
+          type: Number(ch.type) === 2 ? 2 : 1,
+        }))
+        .filter((ch) => ch.name),
+    }))
+    .filter((cat) => cat.name);
+
+  return { ...template, categories };
+}
+
+function getBuildDelayMs(duration: string | undefined, totalActions: number) {
+  if (!duration || duration === "fast") return 500;
+
+  const minutes = Number(duration);
+  if (!Number.isFinite(minutes) || minutes <= 0 || totalActions <= 0) return 500;
+
+  return Math.max(500, Math.floor((minutes * 60_000) / totalActions));
 }
 
 export async function POST(req: NextRequest) {
@@ -25,14 +79,8 @@ export async function POST(req: NextRequest) {
   if (!payload) return NextResponse.json({ error: "登录已过期" }, { status: 401 });
 
   try {
-    const body = await req.json();
-    const { botId, guildId, templateId, templateData, structure } = body as {
-      botId: string;
-      guildId: string;
-      templateId?: string;
-      templateData?: ServerTemplate;
-      structure?: ServerTemplate["categories"];
-    };
+    const body = (await req.json()) as BuildBody;
+    const { botId, guildId } = body;
 
     if (!botId || !guildId) {
       return NextResponse.json({ error: "缺少 botId 或 guildId" }, { status: 400 });
@@ -43,34 +91,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "无权操作" }, { status: 403 });
     }
 
-    let template: ServerTemplate | undefined;
-    if (templateId) template = ALL_TEMPLATES.find((t) => t.id === templateId);
-    if (!template && templateData) template = templateData;
-    if (!template && structure) {
-      template = {
-        id: "imported-structure",
-        name: "导入的服务器结构",
-        description: "从 KOOK 服务器导入的频道结构",
-        categories: structure,
-      };
-    }
-
+    const template = normalizeTemplate(body);
     if (!template) {
-      return NextResponse.json({ error: "未找到模板或导入结构" }, { status: 400 });
+      return NextResponse.json({ error: "未找到模板或频道结构" }, { status: 400 });
     }
 
-    const buildId = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const totalChannels = template.categories.reduce(
-      (sum, cat) => sum + cat.channels.length,
+    if (template.categories.length === 0) {
+      return NextResponse.json({ error: "请至少配置一个有效分组" }, { status: 400 });
+    }
+
+    const totalActions = template.categories.reduce(
+      (sum, cat) => sum + 1 + cat.channels.length,
       0
     );
+    const delayMs = getBuildDelayMs(body.duration, totalActions);
+    const buildId = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     buildProgress.set(buildId, {
       status: "running",
       step: "准备搭建...",
       current: 0,
-      total: totalChannels,
-      log: [{ time: new Date().toISOString(), level: "info", message: `开始搭建 ${template.name}` }],
+      total: totalActions,
+      log: [{
+        time: new Date().toISOString(),
+        level: "info",
+        message: `开始搭建 ${template.name}${body.sendWithUser ? "（个人号导航模式已收到，当前按机器人 API 创建频道）" : ""}`,
+      }],
     });
 
     (async () => {
@@ -84,18 +130,20 @@ export async function POST(req: NextRequest) {
         let channelsCreated = 0;
         const errors: string[] = [];
 
-        for (const cat of template!.categories) {
+        for (const cat of template.categories) {
           try {
             addLog("info", `创建分组: ${cat.name}`);
             const catChannel = await createChannel(
               bot.token,
               guildId,
               cat.name,
-              1,
+              0,
               undefined,
               undefined
             );
             categoriesCreated++;
+            progress.current = categoriesCreated + channelsCreated;
+            progress.step = `创建分组: ${cat.name}`;
 
             for (const ch of cat.channels) {
               try {
@@ -109,14 +157,15 @@ export async function POST(req: NextRequest) {
                   undefined
                 );
                 channelsCreated++;
-                progress.current = channelsCreated;
+                progress.current = categoriesCreated + channelsCreated;
                 progress.step = `创建频道: ${ch.name}`;
               } catch (e: unknown) {
                 const message = getErrorMessage(e);
                 errors.push(`频道 [${ch.name}] 创建失败: ${message}`);
                 addLog("error", `频道 [${ch.name}] 创建失败: ${message}`);
               }
-              await new Promise((r) => setTimeout(r, 500));
+
+              await new Promise((resolve) => setTimeout(resolve, delayMs));
             }
           } catch (e: unknown) {
             const message = getErrorMessage(e);
@@ -129,7 +178,7 @@ export async function POST(req: NextRequest) {
         progress.status = "completed";
         progress.step = "搭建完成";
         progress.result = {
-          success: true,
+          success: errors.length === 0,
           categories: categoriesCreated,
           channels: channelsCreated,
           errors,

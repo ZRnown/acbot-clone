@@ -8,7 +8,7 @@ import {
   CheckCircle2, AlertCircle, Loader2,
   Eye, Server, Image,
   Hash, Volume2,
-  Hammer, Send, Wrench, Plus, Trash2, User,
+  Hammer, Plus, Trash2, User,
 } from "lucide-react";
 
 interface BotData {
@@ -38,11 +38,9 @@ interface TplCategory { name: string; channels: Array<{ name: string; type: numb
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
 
 type TabKey = "basic" | "emoji" | "build";
-type BuilderMode = "builder" | "navigation" | "tools";
 type BuildRequestBody = {
   botId: string;
   guildId: string;
-  templateId?: string;
   structure?: TplCategory[];
   serverName?: string;
   duration?: string;
@@ -103,7 +101,6 @@ export default function BotDetailPage() {
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildProg, setBuildProg] = useState<BuildProg | null>(null);
   const [importStructure, setImportStructure] = useState<TplCategory[] | null>(null);
-  const [builderMode, setBuilderMode] = useState<BuilderMode>("builder");
   const [builderServerName, setBuilderServerName] = useState("");
   const [builderCategories, setBuilderCategories] = useState<TplCategory[]>([]);
   const [buildDuration, setBuildDuration] = useState("fast");
@@ -308,7 +305,6 @@ export default function BotDetailPage() {
         duration: buildDuration,
         sendWithUser,
       };
-      if (selTemplate && !importResult) body.templateId = selTemplate.id;
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       const jobId = data.jobId || data.buildId;
@@ -398,7 +394,7 @@ export default function BotDetailPage() {
           ))}
         </nav>
 
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6">
 
           {tab === "basic" && (
             <div className="max-w-4xl space-y-5">
@@ -556,24 +552,6 @@ export default function BotDetailPage() {
 
           {tab === "build" && (
             <div className="space-y-4 max-w-4xl">
-              <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 border border-gray-200/60 w-fit">
-                {[
-                  { key: "builder" as BuilderMode, label: "一键搭建", icon: <Hammer className="h-4 w-4" /> },
-                  { key: "navigation" as BuilderMode, label: "单独发导航", icon: <Send className="h-4 w-4" /> },
-                  { key: "tools" as BuilderMode, label: "服务器工具", icon: <Wrench className="h-4 w-4" /> },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    onClick={() => setBuilderMode(item.key)}
-                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${builderMode === item.key ? "bg-white text-blue-600 shadow-sm ring-1 ring-blue-100" : "text-gray-500 hover:text-gray-700"}`}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {builderMode === "builder" ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2.5">
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-sm">
@@ -582,10 +560,6 @@ export default function BotDetailPage() {
                     <div>
                       <div className="text-base font-bold text-gray-800 leading-tight">一键搭建服务器</div>
                       <div className="text-[11px] text-gray-400">选服务器 → 套模板 → 调结构 → 发布，全程可视化</div>
-                    </div>
-                    <div className="ml-auto text-right">
-                      <div className="text-xs font-semibold text-gray-700">本月免费剩余 <span className="text-red-500">0</span><span className="text-gray-400"> / 1 次</span></div>
-                      <div className="text-[11px] text-gray-400">用完后 ¥20/次 继续</div>
                     </div>
                   </div>
 
@@ -747,12 +721,6 @@ export default function BotDetailPage() {
                     </section>
                   )}
                 </div>
-              ) : (
-                <section className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-                  <div className="text-sm font-semibold text-gray-800">{builderMode === "navigation" ? "单独发导航" : "服务器工具"}</div>
-                  <div className="mt-1 text-xs text-slate-500">当前先复刻一键搭建服务器流程。</div>
-                </section>
-              )}
             </div>
           )}
 
