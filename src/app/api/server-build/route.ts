@@ -214,9 +214,14 @@ export async function POST(req: NextRequest) {
           progress.current++;
         }
 
-        addLog("success", `搭建完成: 分组 ${categoriesCreated}, 频道 ${channelsCreated}`);
-        progress.status = "completed";
-        progress.step = "搭建完成";
+        progress.current = progress.total;
+        const completelyFailed = categoriesCreated === 0;
+        addLog(
+          completelyFailed ? "error" : "success",
+          `${completelyFailed ? "搭建失败" : "搭建完成"}: 分组 ${categoriesCreated}, 频道 ${channelsCreated}`
+        );
+        progress.status = completelyFailed ? "failed" : "completed";
+        progress.step = completelyFailed ? "搭建失败" : "搭建完成";
         progress.result = {
           success: errors.length === 0,
           categories: categoriesCreated,

@@ -105,11 +105,9 @@ export async function createChannel(
   parentId?: string,
   level?: number
 ): Promise<KookChannel> {
-  const body: Record<string, any> = {
-    guild_id: guildId,
-    name,
-    type,
-  };
+  const body: Record<string, any> = type === 0
+    ? { guild_id: guildId, name, is_category: 1 }
+    : { guild_id: guildId, name, type };
   if (parentId) body.parent_id = parentId;
   if (level !== undefined) body.level = level;
 

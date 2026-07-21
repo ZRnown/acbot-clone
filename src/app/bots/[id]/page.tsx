@@ -105,6 +105,7 @@ export default function BotDetailPage() {
   const [importResult, setImportResult] = useState<{ structure: TplCategory[]; guildId: string } | null>(null);
   const [buildGuildId, setBuildGuildId] = useState("");
   const [buildLoading, setBuildLoading] = useState(false);
+  const [buildError, setBuildError] = useState("");
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildProg, setBuildProg] = useState<BuildProg | null>(null);
   const [importStructure, setImportStructure] = useState<TplCategory[] | null>(null);
@@ -425,7 +426,7 @@ export default function BotDetailPage() {
 
   const startBuild = async () => {
     if (!bot || !buildGuildId || !builderServerName.trim() || builderCategories.length === 0) return;
-    setBuildLoading(true); setBuildProg(null); setBuildJobId(null);
+    setBuildLoading(true); setBuildError(""); setBuildProg(null); setBuildJobId(null);
     try {
       const body: BuildRequestBody = {
         botId: bot.id,
@@ -439,10 +440,14 @@ export default function BotDetailPage() {
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "提交搭建任务失败");
       const jobId = data.jobId || data.buildId;
       if (jobId) { setBuildJobId(jobId); startPolling(jobId); }
-      else setBuildLoading(false);
-    } catch { setBuildLoading(false); }
+      else throw new Error("服务器未返回搭建任务 ID");
+    } catch (error: unknown) {
+      setBuildError(error instanceof Error ? error.message : String(error));
+      setBuildLoading(false);
+    }
   };
 
   const startPolling = (jobId: string) => {
@@ -937,6 +942,7 @@ export default function BotDetailPage() {
                     {(!buildGuildId || !builderServerName.trim() || builderCategories.length === 0) && (
                       <div className="text-[11px] text-amber-600 text-center">请先选择服务器、填写名称，并配置频道结构</div>
                     )}
+                    {buildError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">{buildError}</div>}
                   </section>
 
                   {buildProg && (

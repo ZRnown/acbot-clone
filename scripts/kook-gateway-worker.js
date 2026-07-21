@@ -9,15 +9,28 @@ if (!token) {
 const client = new Kasumi({ type: "websocket", token }, false, false);
 let connected = false;
 
-client.on("connect.websocket", (event) => {
-  connected = true;
-  if (process.send) {
-    process.send({
-      type: "online",
-      bot: event.bot,
-      sessionId: event.sessionId,
-    });
+// Kasumi switches away from webhook mode by calling /user/offline before opening
+// the gateway. On current KOOK this leaves the bot presence offline, so keep the
+// SDK's gateway/heartbeat implementation but skip that obsolete transition.
+client.API.user.offline = async () => ({ data: undefined, err: undefined });
+
+client.on("connect.websocket", async (event) => {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const { data, err } = await client.API.user.me();
+    if (!err && data && data.online === true) {
+      connected = true;
+      if (process.send) {
+        process.send({
+          type: "online",
+          bot: event.bot,
+          sessionId: event.sessionId,
+        });
+      }
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  if (process.send) process.send({ type: "error", error: "Gateway 已连接，但 KOOK 仍报告机器人离线" });
 });
 
 const shutdown = () => process.exit(0);
