@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { promises as fs } from "fs";
+import { promises as fsp } from "fs";
+import fs from "fs";
 import path from "path";
 
 export interface User {
@@ -10,6 +11,22 @@ export interface User {
   role: "admin" | "user";
   createdAt: string;
   bots: string[];
+}
+
+export interface UserTemplate {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  categories: Array<{
+    name: string;
+    channels: Array<{
+      name: string;
+      type: number;
+      topic?: string;
+    }>;
+  }>;
+  createdAt: string;
 }
 
 export interface Bot {
@@ -23,13 +40,11 @@ export interface Bot {
   token: string;
   tokenValid: boolean;
   createdAt: string;
-  // Real stats from KOOK API
   serverCount: number;
   memberCount: number;
   channelCount: number;
   onlineUserCount: number;
   lastSyncedAt: string;
-  // Historical snapshots for chart (max 30 entries, newest first)
   statsHistory: Array<{
     date: string;
     serverCount: number;
@@ -37,7 +52,6 @@ export interface Bot {
     channelCount: number;
     onlineUserCount: number;
   }>;
-  // Legacy stats (kept for backward compat, now populated from real data)
   stats: {
     observe: number;
     send: number;
@@ -46,7 +60,6 @@ export interface Bot {
   config: {
     displayName: string;
     avatar: string;
-    personality: string;
   };
   migration: {
     sourceGuildId: string;
@@ -74,20 +87,26 @@ const DB_FILE = path.join(DB_PATH, "db.json");
 interface Database {
   users: User[];
   bots: Bot[];
+  templates: UserTemplate[];
 }
 
 async function readDb(): Promise<Database> {
   try {
-    const raw = await fs.readFile(DB_FILE, "utf-8");
-    return JSON.parse(raw);
+    const raw = await fsp.readFile(DB_FILE, "utf-8");
+    const data = JSON.parse(raw);
+    return {
+      users: data.users || [],
+      bots: data.bots || [],
+      templates: data.templates || [],
+    };
   } catch {
-    return { users: [], bots: [] };
+    return { users: [], bots: [], templates: [] };
   }
 }
 
 async function writeDb(data: Database) {
-  await fs.mkdir(DB_PATH, { recursive: true });
-  await fs.writeFile(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  await fsp.mkdir(DB_PATH, { recursive: true });
+  await fsp.writeFile(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || "acbot-secret-key-change-in-production";
@@ -171,7 +190,6 @@ export async function createBot(ownerId: string, data: Partial<Bot>): Promise<Bo
     config: {
       displayName: data.config?.displayName || "",
       avatar: data.config?.avatar || "",
-      personality: data.config?.personality || "",
     },
     migration: {
       sourceGuildId: "",
@@ -188,7 +206,6 @@ export async function createBot(ownerId: string, data: Partial<Bot>): Promise<Bo
   };
   db.bots.push(bot);
 
-  // Link bot to user
   const user = db.users.find((u) => u.id === ownerId);
   if (user) user.bots.push(bot.id);
 
@@ -213,7 +230,6 @@ export async function updateBot(id: string, updates: Partial<Bot>): Promise<Bot 
   return db.bots[idx];
 }
 
-/** Sync a bot's real stats from KOOK API and save a snapshot to history */
 export async function syncBotStats(id: string, stats: {
   serverCount: number;
   memberCount: number;
@@ -234,7 +250,6 @@ export async function syncBotStats(id: string, stats: {
   db.bots[idx].lastSyncedAt = dateStr;
   db.bots[idx].tokenValid = true;
 
-  // Add snapshot (keep last 30)
   db.bots[idx].statsHistory.unshift({
     date: dateStr,
     serverCount: stats.serverCount,
@@ -246,7 +261,6 @@ export async function syncBotStats(id: string, stats: {
     db.bots[idx].statsHistory = db.bots[idx].statsHistory.slice(0, 30);
   }
 
-  // Update legacy stats to real channel count as message proxy
   db.bots[idx].stats = {
     observe: stats.memberCount,
     send: stats.channelCount,
@@ -264,7 +278,6 @@ export async function deleteBot(id: string): Promise<boolean> {
 
   db.bots.splice(idx, 1);
 
-  // Remove from user
   db.users.forEach((u) => {
     u.bots = u.bots.filter((b) => b !== id);
   });
@@ -284,6 +297,52 @@ export async function updatePassword(userId: string, currentPassword: string, ne
   user.passwordHash = await bcrypt.hash(newPassword, 10);
   await writeDb(db);
   return true;
+}
+
+// === User Template CRUD ===
+
+export function getUserTemplates(ownerId: string): UserTemplate[] {
+  try {
+    const raw = fs.readFileSync(DB_FILE, "utf-8");
+    const data = JSON.parse(raw);
+    return (data.templates || []).filter((t: UserTemplate) => t.ownerId === ownerId);
+  } catch {
+    return [];
+  }
+}
+
+export function saveUserTemplate(ownerId: string, template: Omit<UserTemplate, "ownerId" | "createdAt">): UserTemplate {
+  const raw = fs.readFileSync(DB_FILE, "utf-8");
+  const data = JSON.parse(raw);
+  if (!data.templates) data.templates = [];
+
+  const newTemplate: UserTemplate = {
+    ...template,
+    ownerId,
+    createdAt: new Date().toISOString(),
+  };
+  data.templates.push(newTemplate);
+
+  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+  return newTemplate;
+}
+
+export function deleteUserTemplate(ownerId: string, templateId: string): boolean {
+  const raw = fs.readFileSync(DB_FILE, "utf-8");
+  const data = JSON.parse(raw);
+  if (!data.templates) return false;
+
+  const before = data.templates.length;
+  data.templates = data.templates.filter(
+    (t: UserTemplate) => !(t.id === templateId && t.ownerId === ownerId)
+  );
+  const after = data.templates.length;
+
+  if (before !== after) {
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf-8");
+    return true;
+  }
+  return false;
 }
 
 export { readDb, writeDb };
