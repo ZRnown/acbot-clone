@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     name: t.name,
     description: t.description,
     source: t.source,
+    categories: t.categories,
     ...getTemplateStats(t),
   }));
 

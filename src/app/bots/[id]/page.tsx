@@ -6,8 +6,9 @@ import { Sidebar } from "@/components/sidebar";
 import {
   ChevronLeft, Bot as BotIcon, RefreshCw, Power, PowerOff,
   CheckCircle2, AlertCircle, Loader2,
-  Eye, Server, Play, Image,
-  Hash, Volume2, Database, ArrowRight, ClipboardList,
+  Eye, Server, Image,
+  Hash, Volume2,
+  Hammer, Send, Wrench, Plus, Trash2, User,
 } from "lucide-react";
 
 interface BotData {
@@ -31,16 +32,21 @@ interface EmojiCat { key: string; label: string; count: number; }
 interface TplItem {
   id: string; name: string; description: string; source?: string;
   categoryCount?: number; channelCount?: number; groups?: number; channels?: number;
+  categories?: TplCategory[];
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
 
 type TabKey = "basic" | "emoji" | "build";
+type BuilderMode = "builder" | "navigation" | "tools";
 type BuildRequestBody = {
   botId: string;
   guildId: string;
   templateId?: string;
   structure?: TplCategory[];
+  serverName?: string;
+  duration?: string;
+  sendWithUser?: boolean;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -97,6 +103,11 @@ export default function BotDetailPage() {
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildProg, setBuildProg] = useState<BuildProg | null>(null);
   const [importStructure, setImportStructure] = useState<TplCategory[] | null>(null);
+  const [builderMode, setBuilderMode] = useState<BuilderMode>("builder");
+  const [builderServerName, setBuilderServerName] = useState("");
+  const [builderCategories, setBuilderCategories] = useState<TplCategory[]>([]);
+  const [buildDuration, setBuildDuration] = useState("fast");
+  const [sendWithUser, setSendWithUser] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
@@ -225,19 +236,79 @@ export default function BotDetailPage() {
       if (data.success) {
         setImportResult({ structure: data.structure, guildId: data.guildId });
         setImportStructure(data.structure || []);
+        setBuilderCategories(data.structure || []);
         setSelTemplate(null);
       }
     } catch { /* ignore */ }
     finally { setImportLoading(false); }
   };
 
+  const applyTemplate = (tpl: TplItem) => {
+    setSelTemplate(tpl);
+    setImportResult(null);
+    setImportStructure(null);
+    setBuilderCategories((tpl.categories || []).map((cat) => ({
+      name: cat.name,
+      channels: cat.channels.map((ch) => ({ ...ch })),
+    })));
+  };
+
+  const addCategory = () => {
+    setBuilderCategories((prev) => [
+      ...prev,
+      { name: `新分组 ${prev.length + 1}`, channels: [{ name: "新频道", type: 1 }] },
+    ]);
+  };
+
+  const updateCategoryName = (catIndex: number, name: string) => {
+    setBuilderCategories((prev) => prev.map((cat, i) => i === catIndex ? { ...cat, name } : cat));
+  };
+
+  const removeCategory = (catIndex: number) => {
+    setBuilderCategories((prev) => prev.filter((_, i) => i !== catIndex));
+  };
+
+  const addChannel = (catIndex: number) => {
+    setBuilderCategories((prev) => prev.map((cat, i) => i === catIndex
+      ? { ...cat, channels: [...cat.channels, { name: "新频道", type: 1 }] }
+      : cat
+    ));
+  };
+
+  const updateChannel = (
+    catIndex: number,
+    channelIndex: number,
+    updates: Partial<TplCategory["channels"][number]>
+  ) => {
+    setBuilderCategories((prev) => prev.map((cat, i) => {
+      if (i !== catIndex) return cat;
+      return {
+        ...cat,
+        channels: cat.channels.map((ch, j) => j === channelIndex ? { ...ch, ...updates } : ch),
+      };
+    }));
+  };
+
+  const removeChannel = (catIndex: number, channelIndex: number) => {
+    setBuilderCategories((prev) => prev.map((cat, i) => i === catIndex
+      ? { ...cat, channels: cat.channels.filter((_, j) => j !== channelIndex) }
+      : cat
+    ));
+  };
+
   const startBuild = async () => {
-    if (!bot || !buildGuildId || (!selTemplate && !importResult)) return;
+    if (!bot || !buildGuildId || !builderServerName.trim() || builderCategories.length === 0) return;
     setBuildLoading(true); setBuildProg(null); setBuildJobId(null);
     try {
-      const body: BuildRequestBody = { botId: bot.id, guildId: buildGuildId };
-      if (selTemplate) body.templateId = selTemplate.id;
-      if (importResult) body.structure = importResult.structure;
+      const body: BuildRequestBody = {
+        botId: bot.id,
+        guildId: buildGuildId,
+        serverName: builderServerName.trim(),
+        structure: builderCategories,
+        duration: buildDuration,
+        sendWithUser,
+      };
+      if (selTemplate && !importResult) body.templateId = selTemplate.id;
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       const jobId = data.jobId || data.buildId;
@@ -484,206 +555,208 @@ export default function BotDetailPage() {
 
 
           {tab === "build" && (
-            <div className="grid grid-cols-1 xl:grid-cols-[1.18fr_0.82fr] gap-5">
-              <div className="space-y-5">
-                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="space-y-4 max-w-4xl">
+              <div className="flex gap-1 p-1 rounded-xl bg-gray-100/80 border border-gray-200/60 w-fit">
+                {[
+                  { key: "builder" as BuilderMode, label: "一键搭建", icon: <Hammer className="h-4 w-4" /> },
+                  { key: "navigation" as BuilderMode, label: "单独发导航", icon: <Send className="h-4 w-4" /> },
+                  { key: "tools" as BuilderMode, label: "服务器工具", icon: <Wrench className="h-4 w-4" /> },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    onClick={() => setBuilderMode(item.key)}
+                    className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${builderMode === item.key ? "bg-white text-blue-600 shadow-sm ring-1 ring-blue-100" : "text-gray-500 hover:text-gray-700"}`}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {builderMode === "builder" ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 text-white shadow-sm">
+                      <Hammer className="h-4.5 w-4.5" />
+                    </div>
                     <div>
-                      <h2 className="text-sm font-semibold text-[#171d26] flex items-center gap-2">
-                        <ClipboardList className="w-4 h-4 text-blue-600" />
-                        选择模板
-                      </h2>
-                      <p className="text-xs text-slate-500 mt-1">先选一个模板，或者从现有 KOOK 服务器导入结构。</p>
+                      <div className="text-base font-bold text-gray-800 leading-tight">一键搭建服务器</div>
+                      <div className="text-[11px] text-gray-400">选服务器 → 套模板 → 调结构 → 发布，全程可视化</div>
                     </div>
-                    <span className="text-xs text-slate-400">{templates.length + (userTpls.length || 0)} 个可用模板</span>
+                    <div className="ml-auto text-right">
+                      <div className="text-xs font-semibold text-gray-700">本月免费剩余 <span className="text-red-500">0</span><span className="text-gray-400"> / 1 次</span></div>
+                      <div className="text-[11px] text-gray-400">用完后 ¥20/次 继续</div>
+                    </div>
                   </div>
 
-                  {tplLoading ? (
-                    <div className="flex items-center gap-2 text-slate-500 text-sm py-8">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      模板加载中...
+                  <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-100 text-blue-600 text-xs font-bold">1</span>
+                      准备
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {templates.map((tpl) => {
-                        const categoryCount = tpl.categoryCount ?? tpl.groups ?? 0;
-                        const channelCount = tpl.channelCount ?? tpl.channels ?? 0;
-                        const active = selTemplate?.id === tpl.id;
-                        return (
-                          <button
-                            key={tpl.id}
-                            onClick={() => {
-                              setSelTemplate(tpl);
-                              setImportResult(null);
-                              setImportStructure(null);
-                            }}
-                            className={`text-left rounded-xl border p-4 transition ${active ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-blue-300 hover:bg-slate-50"}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="text-sm font-semibold text-[#171d26] truncate">{tpl.name}</p>
-                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{tpl.description}</p>
-                              </div>
-                              {active && <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />}
-                            </div>
-                            <div className="mt-3 flex items-center gap-4 text-xs text-slate-500">
-                              <span className="inline-flex items-center gap-1"><Hash className="w-3.5 h-3.5" />{categoryCount} 分类</span>
-                              <span className="inline-flex items-center gap-1"><Volume2 className="w-3.5 h-3.5" />{channelCount} 频道</span>
-                            </div>
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-medium text-gray-600">选择目标服务器</div>
+                      <select value={buildGuildId} onChange={(e) => setBuildGuildId(e.target.value)}
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400">
+                        <option value="">请选择</option>
+                        {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
+                      </select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-medium text-gray-600">服务器名称</div>
+                      <input type="text" value={builderServerName} onChange={(e) => setBuilderServerName(e.target.value)}
+                        placeholder="例如：知你电竞"
+                        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                    </div>
+                    <div className="space-y-1.5 rounded-lg border border-blue-100 bg-blue-50/40 p-3">
+                      <div className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                        导入服务器
+                        <span className="text-[11px] text-slate-500 font-normal">粘贴 KOOK 服务器链接或 ID，自动拉取频道结构进编辑器</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <input value={importUrl} onChange={(e) => setImportUrl(e.target.value)}
+                          placeholder="粘贴服务器链接或 guildId"
+                          className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-400" />
+                        <button onClick={importServer} disabled={importLoading || !importUrl.trim()}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] bg-blue-600 text-white hover:bg-blue-700 h-10 px-4 py-2 shrink-0">
+                          {importLoading && <Loader2 className="h-4 w-4 animate-spin" />}
+                          导入
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-100 text-blue-600 text-xs font-bold">2</span>
+                      频道结构
+                    </div>
+                    {tplLoading ? (
+                      <div className="flex items-center gap-2 text-slate-500 text-sm py-4"><Loader2 className="w-4 h-4 animate-spin" />模板加载中...</div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                        {templates.map((tpl) => (
+                          <button key={tpl.id} onClick={() => applyTemplate(tpl)}
+                            className={`text-left p-2.5 rounded-lg border transition-all text-xs ${selTemplate?.id === tpl.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-100" : "border-gray-200 hover:border-blue-300"}`}>
+                            <div className="font-medium text-sm truncate">{tpl.name}</div>
+                            <div className="text-slate-500 mt-0.5 line-clamp-2">{tpl.description}</div>
                           </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
+                        ))}
+                      </div>
+                    )}
 
-                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Database className="w-4 h-4 text-blue-600" />
-                    <h2 className="text-sm font-semibold text-[#171d26]">导入结构</h2>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <input
-                      type="text"
-                      value={importUrl}
-                      onChange={(e) => setImportUrl(e.target.value)}
-                      placeholder="服务器链接或 ID"
-                      className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20"
-                    />
-                    <button
-                      onClick={importServer}
-                      disabled={importLoading || !importUrl.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
-                    >
-                      {importLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                      导入
-                    </button>
-                  </div>
-
-                  <div className="mt-4 rounded-xl border border-dashed border-gray-200 bg-slate-50 p-4">
-                    {importResult ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-[#171d26]">已导入结构</p>
-                          <span className="text-xs text-slate-500">{importResult.structure.length} 个分组</span>
+                    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs font-semibold text-gray-700">
+                          结构编辑器
+                          <span className="ml-2 font-normal text-slate-400">{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</span>
                         </div>
-                        <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                          {importResult.structure.map((group) => (
-                            <div key={group.name} className="rounded-lg border border-gray-200 bg-white p-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-medium text-[#171d26] truncate">{group.name}</p>
-                                <span className="text-xs text-slate-500">{group.channels.length} 个频道</span>
+                        <button onClick={addCategory} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-300">
+                          <Plus className="h-3.5 w-3.5" />添加分组
+                        </button>
+                      </div>
+
+                      {builderCategories.length === 0 ? (
+                        <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center">
+                          <div className="text-sm font-medium text-gray-700">还没有频道结构</div>
+                          <div className="text-xs text-slate-400 mt-1">选择上方模板，或手动添加分组和频道。</div>
+                          <button onClick={addCategory} className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                            <Plus className="h-3.5 w-3.5" />手动配置
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                          {builderCategories.map((cat, catIndex) => (
+                            <div key={catIndex} className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <input value={cat.name} onChange={(e) => updateCategoryName(catIndex, e.target.value)}
+                                  className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-400" />
+                                <button onClick={() => addChannel(catIndex)} className="rounded-md border border-gray-200 p-1.5 text-blue-600 hover:border-blue-300" title="添加频道"><Plus className="h-4 w-4" /></button>
+                                <button onClick={() => removeCategory(catIndex)} className="rounded-md border border-gray-200 p-1.5 text-red-500 hover:border-red-200" title="删除分组"><Trash2 className="h-4 w-4" /></button>
                               </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {group.channels.slice(0, 6).map((ch) => (
-                                  <span key={`${group.name}-${ch.name}`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-                                    {ch.type === 2 ? <Volume2 className="w-3 h-3" /> : <Hash className="w-3 h-3" />}
-                                    {ch.name}
-                                  </span>
+                              <div className="space-y-1.5">
+                                {cat.channels.map((ch, channelIndex) => (
+                                  <div key={channelIndex} className="flex items-center gap-2">
+                                    <select value={ch.type} onChange={(e) => updateChannel(catIndex, channelIndex, { type: Number(e.target.value) })}
+                                      className="w-20 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400">
+                                      <option value={1}>文字</option>
+                                      <option value={2}>语音</option>
+                                    </select>
+                                    <span className="text-slate-400">{ch.type === 2 ? <Volume2 className="h-3.5 w-3.5" /> : <Hash className="h-3.5 w-3.5" />}</span>
+                                    <input value={ch.name} onChange={(e) => updateChannel(catIndex, channelIndex, { name: e.target.value })}
+                                      className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400" />
+                                    <button onClick={() => removeChannel(catIndex, channelIndex)} className="rounded-md border border-gray-200 p-1.5 text-red-500 hover:border-red-200" title="删除频道"><Trash2 className="h-3.5 w-3.5" /></button>
+                                  </div>
                                 ))}
                               </div>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    ) : importStructure ? (
-                      <p className="text-sm text-slate-500">已缓存导入结构，等待执行搭建。</p>
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm text-slate-500">
-                        <ArrowRight className="w-4 h-4" />
-                        导入后会在这里显示完整频道骨架。
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
-
-              <div className="space-y-5">
-                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Play className="w-4 h-4 text-blue-600" />
-                    <h2 className="text-sm font-semibold text-[#171d26]">执行搭建</h2>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">目标服务器</label>
-                      <select
-                        value={buildGuildId}
-                        onChange={(e) => setBuildGuildId(e.target.value)}
-                        className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] focus:outline-none focus:border-blue-500"
-                      >
-                        <option value="">-- 选择服务器 --</option>
-                        {guilds.map((g) => (<option key={g.id} value={g.id}>{g.name}</option>))}
-                      </select>
+                      )}
                     </div>
+                  </section>
 
-                    <button
-                      onClick={startBuild}
-                      disabled={buildLoading || !buildGuildId || (!selTemplate && !importResult)}
-                      className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center justify-center gap-2"
-                    >
-                      {buildLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-3 shadow-sm">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-gray-800"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500 text-white text-xs font-bold">✓</span>确认搭建</div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                      <div className="text-slate-500">服务器</div><div>{guilds.find((g) => g.id === buildGuildId)?.name || "未选择"}</div>
+                      <div className="text-slate-500">名称</div><div>{builderServerName || "未填写"}</div>
+                      <div className="text-slate-500">模板</div><div>{selTemplate?.name || (importResult ? "导入结构" : "手动配置")}</div>
+                      <div className="text-slate-500">频道结构</div><div>{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</div>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs"><User className="h-3.5 w-3.5 text-gray-500" /><span className="font-medium">用个人号发导航</span><span className="text-slate-500">（客户看到的是真人发的消息）</span></div>
+                        <button onClick={() => setSendWithUser((v) => !v)} className={`relative w-9 h-5 rounded-full transition-colors ${sendWithUser ? "bg-blue-500" : "bg-gray-300"}`}>
+                          <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${sendWithUser ? "left-[18px]" : "left-0.5"}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
+                      <div className="flex items-center gap-2 text-xs"><span className="font-medium">搭建时长</span><span className="text-slate-500">（不选则尽快完成）</span></div>
+                      <div className="flex gap-2 flex-wrap">
+                        {[["fast", "尽快"], ["1", "1 分钟"], ["3", "3 分钟"], ["5", "5 分钟"], ["10", "10 分钟"]].map(([value, label]) => (
+                          <button key={value} onClick={() => setBuildDuration(value)}
+                            className={`px-3 py-1 rounded-lg text-xs border transition-colors ${buildDuration === value ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={startBuild} disabled={buildLoading || !buildGuildId || !builderServerName.trim() || builderCategories.length === 0}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 active:scale-[0.97] text-white h-10 px-4 py-2 bg-blue-600 hover:bg-blue-700 w-full">
+                      {buildLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hammer className="h-4 w-4" />}
                       {buildLoading ? "搭建中..." : "开始搭建"}
                     </button>
-
-                    {selTemplate && (
-                      <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-[#171d26]">
-                        <div className="font-medium">{selTemplate.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {selTemplate.categoryCount ?? selTemplate.groups ?? 0} 分类 · {selTemplate.channelCount ?? selTemplate.channels ?? 0} 频道
-                        </div>
-                      </div>
+                    {(!buildGuildId || !builderServerName.trim() || builderCategories.length === 0) && (
+                      <div className="text-[11px] text-amber-600 text-center">请先选择服务器、填写名称，并配置频道结构</div>
                     )}
-                  </div>
-                </section>
+                  </section>
 
-                <section className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between gap-3 mb-3">
-                    <h2 className="text-sm font-semibold text-[#171d26]">进度日志</h2>
-                    {buildJobId && <span className="text-xs text-slate-500">{buildJobId}</span>}
-                  </div>
-
-                  {buildProg ? (
-                    <div className="space-y-3">
+                  {buildProg && (
+                    <section className="rounded-xl border border-gray-200 bg-white p-4 space-y-3 shadow-sm">
+                      <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold text-[#171d26]">进度日志</h2>{buildJobId && <span className="text-xs text-slate-500">{buildJobId}</span>}</div>
                       <div className="flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 rounded-full ${buildProg.status === "completed" ? "bg-emerald-500" : buildProg.status === "failed" ? "bg-red-500" : "bg-blue-600"}`}
-                            style={{ width: `${Math.round(buildProg.progress * 100)}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-slate-500 w-10 text-right">
-                          {Math.round(buildProg.progress * 100)}%
-                        </span>
+                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden"><div className={`h-full transition-all duration-500 rounded-full ${buildProg.status === "completed" ? "bg-emerald-500" : buildProg.status === "failed" ? "bg-red-500" : "bg-blue-600"}`} style={{ width: `${Math.round(buildProg.progress * 100)}%` }} /></div>
+                        <span className="text-xs text-slate-500 w-10 text-right">{Math.round(buildProg.progress * 100)}%</span>
                       </div>
                       <p className="text-sm text-slate-600">{buildProg.currentStep}</p>
                       <div className="max-h-56 overflow-y-auto space-y-2 rounded-xl border border-gray-200 bg-slate-50 p-3">
-                        {buildProg.log?.map((l, i) => (
-                          <p key={i} className="text-xs text-slate-500 font-mono leading-5">
-                            {l.time} {l.message}
-                          </p>
-                        ))}
+                        {buildProg.log?.map((l, i) => (<p key={i} className="text-xs text-slate-500 font-mono leading-5">{l.time} {l.message}</p>))}
                       </div>
-                      {buildProg.status === "completed" && (
-                        <div className="flex items-center gap-2 text-emerald-600 text-sm">
-                          <CheckCircle2 className="w-4 h-4" />
-                          服务器搭建完成
-                        </div>
-                      )}
-                      {buildProg.status === "failed" && (
-                        <div className="flex items-center gap-2 text-red-600 text-sm">
-                          <AlertCircle className="w-4 h-4" />
-                          搭建失败
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-500">尚未开始执行。</p>
+                    </section>
                   )}
+                </div>
+              ) : (
+                <section className="rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                  <div className="text-sm font-semibold text-gray-800">{builderMode === "navigation" ? "单独发导航" : "服务器工具"}</div>
+                  <div className="mt-1 text-xs text-slate-500">当前先复刻一键搭建服务器流程。</div>
                 </section>
-              </div>
+              )}
             </div>
           )}
+
+
 
         </div>
       </div>
