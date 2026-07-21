@@ -178,7 +178,7 @@ export default function BotDetailPage() {
   }, [emojiFilter]);
 
   useEffect(() => {
-    if (tab === "emoji") fetchEmojiLib();
+    if (tab === "emoji" || tab === "build") fetchEmojiLib();
   }, [tab, emojiFilter, fetchEmojiLib]);
 
   const fetchTemplates = useCallback(async () => {
@@ -780,13 +780,33 @@ export default function BotDetailPage() {
                               <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
                                 {importResult.emojis.slice(0, 100).map((emoji, index) => (
                                   <img key={`${emoji.url}-${index}`}
-                                    src={emoji.url}
+                                    src={`/api/proxy/avatar?url=${encodeURIComponent(emoji.url)}`}
                                     title={emoji.name} alt={emoji.name}
                                     className="w-7 h-7 rounded object-cover border border-amber-200 bg-white" loading="lazy" />
                                 ))}
                               </div>
                             </>
                           )}
+                        </div>
+                      )}
+                      {importResult && emojis.length > 0 && (
+                        <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                          <button type="button" className="w-full flex items-center justify-between text-sm font-semibold text-gray-800"
+                            onClick={() => setTab("emoji")}>
+                            <span className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-blue-500" />{"\u88c5\u9970\u8868\u60c5"}
+                              <span className="px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-600 text-[11px] font-medium">{"\u8fd9\u6b21\u4f1a\u4e0a\u4f20 "}{emojiSelected.size || Math.min(emojis.length, 21)}{" \u4e2a"}</span>
+                            </span>
+                            <span className="text-xs text-blue-500">{"\u7f16\u8f91 \u8868\u60c5"} <ChevronLeft className="inline h-3 w-3 rotate-180" /></span>
+                          </button>
+                          <div className="grid grid-cols-7 sm:grid-cols-11 gap-1.5 rounded-lg border border-gray-100 p-2 bg-gray-50/60">
+                            {emojis.slice(0, 21).map((emoji) => (
+                              <button key={emoji.id} type="button" title={`${emoji.name} (${emoji.category})`}
+                                onClick={() => toggleEmoji(emoji.id)}
+                                className={`aspect-square rounded-lg border flex items-center justify-center overflow-hidden bg-white ${emojiSelected.has(emoji.id) ? "border-blue-500 ring-2 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
+                                <img src={`/api/emoji-library/thumb/${emoji.category}/${emoji.id}`} alt={emoji.name} className="w-full h-full object-contain" />
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
