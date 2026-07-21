@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
-import { ALL_TEMPLATES, ServerTemplate } from "@/lib/server-templates";
+import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
 import { createChannel } from "@/lib/kook";
 
 const buildProgress = new Map<string, {
@@ -21,6 +21,7 @@ type BuildBody = {
   serverName?: string;
   duration?: string;
   sendWithUser?: boolean;
+  decorationStyleId?: string;
 };
 
 function getErrorMessage(error: unknown) {
@@ -53,7 +54,7 @@ function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
         .map((ch) => ({
           ...ch,
           name: ch.name?.trim(),
-          type: Number(ch.type) === 2 ? 2 : 1,
+          type: [1, 2, 4].includes(Number(ch.type)) ? Number(ch.type) : 1,
         }))
         .filter((ch) => ch.name),
     }))
@@ -131,19 +132,23 @@ export async function POST(req: NextRequest) {
         const errors: string[] = [];
 
         for (const cat of template.categories) {
+          const categoryName = decorateCategoryName(
+            cat.name.replaceAll("{name}", body.serverName?.trim() || template.name),
+            body.decorationStyleId
+          );
           try {
-            addLog("info", `创建分组: ${cat.name}`);
+            addLog("info", `创建分组: ${categoryName}`);
             const catChannel = await createChannel(
               bot.token,
               guildId,
-              cat.name,
+              categoryName,
               0,
               undefined,
               undefined
             );
             categoriesCreated++;
             progress.current = categoriesCreated + channelsCreated;
-            progress.step = `创建分组: ${cat.name}`;
+            progress.step = `创建分组: ${categoryName}`;
 
             for (const ch of cat.channels) {
               try {
@@ -169,8 +174,8 @@ export async function POST(req: NextRequest) {
             }
           } catch (e: unknown) {
             const message = getErrorMessage(e);
-            errors.push(`分组 [${cat.name}] 创建失败: ${message}`);
-            addLog("error", `分组 [${cat.name}] 创建失败: ${message}`);
+            errors.push(`分组 [${categoryName}] 创建失败: ${message}`);
+            addLog("error", `分组 [${categoryName}] 创建失败: ${message}`);
           }
         }
 

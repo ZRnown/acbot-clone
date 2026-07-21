@@ -7,8 +7,7 @@ import {
   ChevronLeft, Bot as BotIcon, RefreshCw, Power, PowerOff,
   CheckCircle2, AlertCircle, Loader2,
   Eye, Server, Image,
-  Hash, Volume2,
-  Hammer, Plus, Trash2, User,
+  Hammer, Plus, User, LayoutGrid, Palette,
 } from "lucide-react";
 
 interface BotData {
@@ -33,8 +32,10 @@ interface TplItem {
   id: string; name: string; description: string; source?: string;
   categoryCount?: number; channelCount?: number; groups?: number; channels?: number;
   categories?: TplCategory[];
+  imported?: boolean;
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
+interface DecorationStyle { id: string; name: string; preview: string; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
 
 type TabKey = "basic" | "emoji" | "build";
@@ -45,6 +46,7 @@ type BuildRequestBody = {
   serverName?: string;
   duration?: string;
   sendWithUser?: boolean;
+  decorationStyleId?: string;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -91,6 +93,7 @@ export default function BotDetailPage() {
 
   const [templates, setTemplates] = useState<TplItem[]>([]);
   const [userTpls, setUserTpls] = useState<TplItem[]>([]);
+  const [decorationStyles, setDecorationStyles] = useState<DecorationStyle[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
   const [selTemplate, setSelTemplate] = useState<TplItem | null>(null);
   const [importUrl, setImportUrl] = useState("");
@@ -103,6 +106,12 @@ export default function BotDetailPage() {
   const [importStructure, setImportStructure] = useState<TplCategory[] | null>(null);
   const [builderServerName, setBuilderServerName] = useState("");
   const [builderCategories, setBuilderCategories] = useState<TplCategory[]>([]);
+  const [defaultBuilderCategories, setDefaultBuilderCategories] = useState<TplCategory[]>([]);
+  const [builderDirty, setBuilderDirty] = useState(false);
+  const [decorationStyleId, setDecorationStyleId] = useState("none");
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [saveTemplateName, setSaveTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const [buildDuration, setBuildDuration] = useState("fast");
   const [sendWithUser, setSendWithUser] = useState(true);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -156,7 +165,12 @@ export default function BotDetailPage() {
     setTplLoading(true);
     try {
       const res = await fetch("/api/templates");
-      if (res.ok) { const data = await res.json(); setTemplates(data.presets || []); setUserTpls(data.userTemplates || []); }
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(data.presets || []);
+        setUserTpls(data.userTemplates || []);
+        setDecorationStyles(data.decorationStyles || []);
+      }
     } catch { /* ignore */ }
     finally { setTplLoading(false); }
   }, []);
@@ -234,6 +248,9 @@ export default function BotDetailPage() {
         setImportResult({ structure: data.structure, guildId: data.guildId });
         setImportStructure(data.structure || []);
         setBuilderCategories(data.structure || []);
+        setDefaultBuilderCategories(data.structure || []);
+        setBuilderDirty(true);
+        setDecorationStyleId("none");
         setSelTemplate(null);
       }
     } catch { /* ignore */ }
@@ -244,25 +261,37 @@ export default function BotDetailPage() {
     setSelTemplate(tpl);
     setImportResult(null);
     setImportStructure(null);
-    setBuilderCategories((tpl.categories || []).map((cat) => ({
+    const categories = (tpl.categories || []).map((cat) => ({
       name: cat.name,
       channels: cat.channels.map((ch) => ({ ...ch })),
-    })));
+    }));
+    setBuilderCategories(categories);
+    setDefaultBuilderCategories(categories);
+    setBuilderDirty(false);
+  };
+
+  const loadUserTemplate = (tpl: TplItem) => {
+    applyTemplate(tpl);
+    setBuilderDirty(true);
+    setDecorationStyleId("none");
   };
 
   const addCategory = () => {
     setBuilderCategories((prev) => [
       ...prev,
-      { name: `新分组 ${prev.length + 1}`, channels: [{ name: "新频道", type: 1 }] },
+      { name: "新分组", channels: [] },
     ]);
+    setBuilderDirty(true);
   };
 
   const updateCategoryName = (catIndex: number, name: string) => {
     setBuilderCategories((prev) => prev.map((cat, i) => i === catIndex ? { ...cat, name } : cat));
+    setBuilderDirty(true);
   };
 
   const removeCategory = (catIndex: number) => {
     setBuilderCategories((prev) => prev.filter((_, i) => i !== catIndex));
+    setBuilderDirty(true);
   };
 
   const addChannel = (catIndex: number) => {
@@ -270,6 +299,7 @@ export default function BotDetailPage() {
       ? { ...cat, channels: [...cat.channels, { name: "新频道", type: 1 }] }
       : cat
     ));
+    setBuilderDirty(true);
   };
 
   const updateChannel = (
@@ -284,6 +314,7 @@ export default function BotDetailPage() {
         channels: cat.channels.map((ch, j) => j === channelIndex ? { ...ch, ...updates } : ch),
       };
     }));
+    setBuilderDirty(true);
   };
 
   const removeChannel = (catIndex: number, channelIndex: number) => {
@@ -291,6 +322,60 @@ export default function BotDetailPage() {
       ? { ...cat, channels: cat.channels.filter((_, j) => j !== channelIndex) }
       : cat
     ));
+    setBuilderDirty(true);
+  };
+
+  const moveCategory = (index: number, direction: -1 | 1) => {
+    setBuilderCategories((prev) => {
+      const next = [...prev];
+      const target = index + direction;
+      if (target < 0 || target >= next.length) return prev;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+    setBuilderDirty(true);
+  };
+
+  const moveChannel = (categoryIndex: number, channelIndex: number, direction: -1 | 1) => {
+    setBuilderCategories((prev) => prev.map((category, index) => {
+      if (index !== categoryIndex) return category;
+      const channels = [...category.channels];
+      const target = channelIndex + direction;
+      if (target < 0 || target >= channels.length) return category;
+      [channels[channelIndex], channels[target]] = [channels[target], channels[channelIndex]];
+      return { ...category, channels };
+    }));
+    setBuilderDirty(true);
+  };
+
+  const restoreTemplate = () => {
+    setBuilderCategories(defaultBuilderCategories.map((category) => ({
+      ...category,
+      channels: category.channels.map((channel) => ({ ...channel })),
+    })));
+    setBuilderDirty(false);
+  };
+
+  const saveCurrentTemplate = async () => {
+    if (!saveTemplateName.trim() || builderCategories.length === 0) return;
+    setSavingTemplate(true);
+    try {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: saveTemplateName.trim(),
+          description: `${builderCategories.length} 分组 / ${builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道`,
+          categories: builderCategories,
+        }),
+      });
+      if (!res.ok) throw new Error("保存失败");
+      setSaveTemplateOpen(false);
+      setSaveTemplateName("");
+      await fetchTemplates();
+    } finally {
+      setSavingTemplate(false);
+    }
   };
 
   const startBuild = async () => {
@@ -304,6 +389,7 @@ export default function BotDetailPage() {
         structure: builderCategories,
         duration: buildDuration,
         sendWithUser,
+        decorationStyleId,
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -608,27 +694,50 @@ export default function BotDetailPage() {
                     {tplLoading ? (
                       <div className="flex items-center gap-2 text-slate-500 text-sm py-4"><Loader2 className="w-4 h-4 animate-spin" />模板加载中...</div>
                     ) : (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {templates.map((tpl) => (
-                          <button key={tpl.id} onClick={() => applyTemplate(tpl)}
-                            className={`text-left p-2.5 rounded-lg border transition-all text-xs ${selTemplate?.id === tpl.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-100" : "border-gray-200 hover:border-blue-300"}`}>
-                            <div className="font-medium text-sm truncate">{tpl.name}</div>
-                            <div className="text-slate-500 mt-0.5 line-clamp-2">{tpl.description}</div>
-                          </button>
-                        ))}
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                          {templates.map((tpl) => (
+                            <button key={tpl.id} onClick={() => applyTemplate(tpl)}
+                              className={`text-left p-2.5 rounded-lg border transition-all text-xs ${selTemplate?.id === tpl.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
+                              <div className="font-medium text-sm">{tpl.name}</div>
+                              <div className="text-slate-500 mt-0.5 line-clamp-2">{tpl.description}</div>
+                            </button>
+                          ))}
+                        </div>
+                        {userTpls.length > 0 && (
+                          <div className="space-y-1.5 pt-1">
+                            <div className="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                              ⭐ 我的模板
+                              <span className="text-[11px] text-slate-500 font-normal">（你存的排版，载入后可继续改）</span>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                              {userTpls.map((tpl) => (
+                                <button key={tpl.id} onClick={() => loadUserTemplate(tpl)}
+                                  className="text-left p-2.5 rounded-lg border border-gray-200 bg-white hover:border-amber-400 hover:bg-amber-50/40 transition-all text-xs relative group">
+                                  <div className="font-medium text-sm pr-4 flex items-center gap-1"><span className="text-amber-500">⭐</span>{tpl.name}</div>
+                                  <div className="text-slate-500 mt-0.5">{tpl.categories?.length || 0} 分组 / {(tpl.categories || []).reduce((sum, category) => sum + category.channels.length, 0)} 频道</div>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3 space-y-3">
+                    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-2 shadow-sm">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="text-xs font-semibold text-gray-700">
-                          结构编辑器
-                          <span className="ml-2 font-normal text-slate-400">{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</span>
+                        <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                          <LayoutGrid className="h-4 w-4 text-blue-500" />排版预览（可编辑）
+                          {builderDirty && <span className="text-[11px] text-amber-500 font-normal">· 已自定义</span>}
                         </div>
-                        <button onClick={addCategory} className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-xs text-blue-600 hover:border-blue-300">
-                          <Plus className="h-3.5 w-3.5" />添加分组
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <span className="ml-2 font-normal text-slate-400">{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</span>
+                          {builderDirty && <button onClick={restoreTemplate} className="text-[11px] text-blue-500 hover:underline">恢复默认</button>}
+                          <button onClick={() => setSaveTemplateOpen(true)} disabled={builderCategories.length === 0}
+                            className="text-[11px] px-2 py-0.5 rounded-md bg-amber-100 text-amber-600 hover:bg-amber-200 disabled:opacity-40">⭐ 存为我的模板</button>
+                        </div>
                       </div>
+                      <div className="text-[11px] text-slate-500">分组名 {"{name}"} 会替换成服务器名。可改名、增删频道、调顺序，搭建时按这里的结构创建。</div>
 
                       {builderCategories.length === 0 ? (
                         <div className="rounded-lg border border-dashed border-gray-300 bg-white p-6 text-center">
@@ -639,36 +748,61 @@ export default function BotDetailPage() {
                           </button>
                         </div>
                       ) : (
-                        <div className="space-y-2 max-h-[460px] overflow-y-auto pr-1">
+                        <div className="space-y-2">
                           {builderCategories.map((cat, catIndex) => (
-                            <div key={catIndex} className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
-                              <div className="flex items-center gap-2">
+                            <div key={catIndex} className="rounded-lg border border-gray-200 bg-white p-2.5 space-y-1">
+                              <div className="flex items-center gap-1.5 pb-1 border-b border-gray-100">
+                                <div className="flex flex-col">
+                                  <button onClick={() => moveCategory(catIndex, -1)} disabled={catIndex === 0} className="text-gray-400 hover:text-blue-500 disabled:opacity-30 leading-none text-[10px]">▲</button>
+                                  <button onClick={() => moveCategory(catIndex, 1)} disabled={catIndex === builderCategories.length - 1} className="text-gray-400 hover:text-blue-500 disabled:opacity-30 leading-none text-[10px]">▼</button>
+                                </div>
+                                <span className="text-gray-400 text-[10px] shrink-0">▾</span>
                                 <input value={cat.name} onChange={(e) => updateCategoryName(catIndex, e.target.value)}
-                                  className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-sm font-medium focus:outline-none focus:border-blue-400" />
-                                <button onClick={() => addChannel(catIndex)} className="rounded-md border border-gray-200 p-1.5 text-blue-600 hover:border-blue-300" title="添加频道"><Plus className="h-4 w-4" /></button>
-                                <button onClick={() => removeCategory(catIndex)} className="rounded-md border border-gray-200 p-1.5 text-red-500 hover:border-red-200" title="删除分组"><Trash2 className="h-4 w-4" /></button>
+                                  placeholder="分组名" className="flex-1 bg-transparent border border-transparent hover:border-gray-200 focus:border-blue-300 focus:bg-white rounded px-1.5 py-1 text-xs font-bold text-gray-700 tracking-wide transition-colors focus:outline-none" />
+                                <button onClick={() => addChannel(catIndex)} className="px-1.5 py-1 rounded bg-blue-50 text-blue-500 text-[11px] hover:bg-blue-100 shrink-0">+频道</button>
+                                <button onClick={() => removeCategory(catIndex)} className="px-1.5 py-1 rounded bg-red-50 text-red-500 text-[11px] hover:bg-red-100 shrink-0">删组</button>
                               </div>
-                              <div className="space-y-1.5">
+                              <div className="space-y-0.5 pl-5">
                                 {cat.channels.map((ch, channelIndex) => (
-                                  <div key={channelIndex} className="flex items-center gap-2">
-                                    <select value={ch.type} onChange={(e) => updateChannel(catIndex, channelIndex, { type: Number(e.target.value) })}
-                                      className="w-20 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400">
-                                      <option value={1}>文字</option>
-                                      <option value={2}>语音</option>
-                                    </select>
-                                    <span className="text-slate-400">{ch.type === 2 ? <Volume2 className="h-3.5 w-3.5" /> : <Hash className="h-3.5 w-3.5" />}</span>
+                                  <div key={channelIndex} className="flex items-center gap-1.5 group rounded px-1 py-0.5 hover:bg-gray-50">
+                                    <div className="flex flex-col">
+                                      <button onClick={() => moveChannel(catIndex, channelIndex, -1)} disabled={channelIndex === 0} className="text-gray-300 hover:text-blue-500 disabled:opacity-20 leading-none text-[9px]">▲</button>
+                                      <button onClick={() => moveChannel(catIndex, channelIndex, 1)} disabled={channelIndex === cat.channels.length - 1} className="text-gray-300 hover:text-blue-500 disabled:opacity-20 leading-none text-[9px]">▼</button>
+                                    </div>
+                                    <span className="text-gray-400 text-xs w-4 text-center shrink-0 select-none">{ch.type === 2 ? "🔊" : ch.type === 4 ? "📋" : "#"}</span>
                                     <input value={ch.name} onChange={(e) => updateChannel(catIndex, channelIndex, { name: e.target.value })}
-                                      className="flex-1 rounded-md border border-gray-200 px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400" />
-                                    <button onClick={() => removeChannel(catIndex, channelIndex)} className="rounded-md border border-gray-200 p-1.5 text-red-500 hover:border-red-200" title="删除频道"><Trash2 className="h-3.5 w-3.5" /></button>
+                                      placeholder="频道名" className="flex-1 bg-transparent border border-transparent hover:border-gray-200 focus:border-blue-300 focus:bg-white rounded px-1.5 py-0.5 text-xs transition-colors focus:outline-none" />
+                                    <select value={ch.type} onChange={(e) => updateChannel(catIndex, channelIndex, { type: Number(e.target.value) })}
+                                      className="bg-white border border-gray-200 rounded px-1 py-0.5 text-[11px] text-gray-600 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
+                                      <option value={1}>文字</option><option value={2}>语音</option><option value={4}>帖子</option>
+                                    </select>
+                                    <button onClick={() => removeChannel(catIndex, channelIndex)} className="text-gray-300 hover:text-red-500 text-xs px-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
                                   </div>
                                 ))}
+                                {cat.channels.length === 0 && <div className="text-[11px] text-slate-500 italic pl-1">空分组（仅创建分类，无子频道）</div>}
                               </div>
                             </div>
                           ))}
+                          <button onClick={addCategory} className="w-full py-1.5 rounded-lg border border-dashed border-gray-300 text-xs text-gray-500 hover:border-blue-300 hover:text-blue-500">+ 添加分组</button>
                         </div>
                       )}
                     </div>
                   </section>
+
+                  {builderCategories.length > 0 && (
+                    <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><Palette className="h-4 w-4 text-blue-500" />分组装饰风格</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                        {decorationStyles.map((style) => (
+                          <button key={style.id} onClick={() => setDecorationStyleId(style.id)}
+                            className={`text-left px-3 py-2 rounded-lg border transition-all ${decorationStyleId === style.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
+                            <div className="text-xs font-medium">{style.name}</div>
+                            <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">{style.preview}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  )}
 
                   <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-3 shadow-sm">
                     <div className="flex items-center gap-2 text-sm font-semibold text-gray-800"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500 text-white text-xs font-bold">✓</span>确认搭建</div>
@@ -676,6 +810,7 @@ export default function BotDetailPage() {
                       <div className="text-slate-500">服务器</div><div>{guilds.find((g) => g.id === buildGuildId)?.name || "未选择"}</div>
                       <div className="text-slate-500">名称</div><div>{builderServerName || "未填写"}</div>
                       <div className="text-slate-500">模板</div><div>{selTemplate?.name || (importResult ? "导入结构" : "手动配置")}</div>
+                      <div className="text-slate-500">装饰</div><div>{decorationStyles.find((style) => style.id === decorationStyleId)?.name || "无装饰（原样搭建）"}</div>
                       <div className="text-slate-500">频道结构</div><div>{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</div>
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
@@ -724,7 +859,25 @@ export default function BotDetailPage() {
             </div>
           )}
 
-
+          {saveTemplateOpen && (
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={() => !savingTemplate && setSaveTemplateOpen(false)}>
+              <div className="bg-white rounded-xl shadow-xl p-5 w-80 space-y-3" onClick={(event) => event.stopPropagation()}>
+                <div className="text-sm font-bold flex items-center gap-1.5">⭐ 存为我的模板</div>
+                <div className="text-xs text-slate-500">给这套排版起个名字，以后可直接调出来改了再搭。</div>
+                <input autoFocus value={saveTemplateName} onChange={(event) => setSaveTemplateName(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter" && !savingTemplate) saveCurrentTemplate(); }}
+                  placeholder="例如：电竞陪玩标准版"
+                  className="w-full bg-white border border-gray-200 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400" />
+                <div className="text-[11px] text-slate-500">{builderCategories.length} 分组 / {builderCategories.reduce((sum, category) => sum + category.channels.length, 0)} 频道</div>
+                <div className="flex gap-2">
+                  <button onClick={saveCurrentTemplate} disabled={!saveTemplateName.trim() || savingTemplate}
+                    className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-600 disabled:opacity-50 px-3 py-2 text-sm font-medium text-white">{savingTemplate ? "保存中..." : "保存"}</button>
+                  <button onClick={() => setSaveTemplateOpen(false)} disabled={savingTemplate}
+                    className="flex-1 rounded-lg border border-gray-200 hover:bg-gray-50 px-3 py-2 text-sm text-gray-600">取消</button>
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>

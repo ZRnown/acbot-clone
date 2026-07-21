@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken } from "@/lib/db";
-import { ALL_TEMPLATES, getTemplateStats, ServerTemplate } from "@/lib/server-templates";
+import {
+  ALL_TEMPLATES,
+  DECORATION_STYLES,
+  IMPORTED_USER_TEMPLATES,
+  getTemplateStats,
+  ServerTemplate,
+} from "@/lib/server-templates";
 import { getUserTemplates, saveUserTemplate, deleteUserTemplate } from "@/lib/db";
 
 export async function GET(req: NextRequest) {
@@ -20,12 +26,17 @@ export async function GET(req: NextRequest) {
   }));
 
   // Return user's saved templates
-  const userTemplates = getUserTemplates(payload.id).map((t) => ({
+  const savedUserTemplates = getUserTemplates(payload.id).map((t) => ({
     ...t,
     ...getTemplateStats(t as ServerTemplate),
   }));
 
-  return NextResponse.json({ presets, userTemplates });
+  const userTemplates = [
+    ...IMPORTED_USER_TEMPLATES.map((t) => ({ ...t, ...getTemplateStats(t) })),
+    ...savedUserTemplates,
+  ];
+
+  return NextResponse.json({ presets, userTemplates, decorationStyles: DECORATION_STYLES });
 }
 
 export async function POST(req: NextRequest) {
