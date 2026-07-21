@@ -73,6 +73,7 @@ export default function BotDetailPage() {
   const [error, setError] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [toggling, setToggling] = useState(false);
+  const [runtimeError, setRuntimeError] = useState("");
   const [tab, setTab] = useState<TabKey>("basic");
 
   const [guilds, setGuilds] = useState<GuildItem[]>([]);
@@ -218,9 +219,9 @@ export default function BotDetailPage() {
   const saveConfig = async () => {
     setSavingCfg(true); setCfgMsg(null);
     try {
-      const res = await fetch(`/api/bots/${id}/config`, {
+      const res = await fetch(`/api/bots/${id}`, {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName, avatar: avatarUrl, guildId: selGuildId }),
+        body: JSON.stringify({ config: { displayName, avatar: avatarUrl }, guildId: selGuildId }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error || "\u4fdd\u5b58\u5931\u8d25"); }
       setCfgMsg({ ok: true, text: "\u914d\u7f6e\u5df2\u4fdd\u5b58" });
@@ -229,21 +230,29 @@ export default function BotDetailPage() {
     finally { setSavingCfg(false); }
   };
 
-  const toggleStatus = async () => {
+  const setBotStatus = async (action: "online" | "offline") => {
     if (!bot) return;
     setToggling(true);
+    setRuntimeError("");
     try {
-      const res = await fetch(`/api/bots/${id}/toggle`, { method: "POST" });
-      if (!res.ok) throw new Error("\u5207\u6362\u5931\u8d25");
-      setBot(prev => prev ? { ...prev, status: prev.status === "online" ? "offline" : "online" } : null);
-    } catch { /* ignore */ }
+      const res = await fetch(`/api/bots/${id}/status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `${action === "online" ? "上线" : "下线"}失败`);
+      setBot(prev => prev ? { ...prev, status: data.status } : null);
+    } catch (error: unknown) {
+      setRuntimeError(error instanceof Error ? error.message : String(error));
+    }
     finally { setToggling(false); }
   };
 
   const syncStats = async () => {
     setSyncing(true);
     try {
-      const res = await fetch(`/api/bots/${id}/sync`, { method: "POST" });
+      const res = await fetch(`/api/bots/${id}/refresh`, { method: "POST" });
       if (!res.ok) throw new Error("\u540c\u6b65\u5931\u8d25");
       fetchBot();
     } catch { /* ignore */ }
@@ -500,14 +509,20 @@ export default function BotDetailPage() {
             <button onClick={syncStats} disabled={syncing} className="p-2 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 transition disabled:opacity-50" title="同步数据">
               <RefreshCw className={`w-4 h-4 ${syncing ? "animate-spin" : ""}`} />
             </button>
-            <button onClick={toggleStatus} disabled={toggling}
-              className={`p-2 rounded-lg transition disabled:opacity-50 ${bot.status === "online" ? "text-green-600 hover:text-green-500 hover:bg-green-50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"}`}
-              title={bot.status === "online" ? "线上 · 点击下线" : "离线 · 点击上线"}
-            >
-              {bot.status === "online" ? <Power className="w-4 h-4" /> : <PowerOff className="w-4 h-4" />}
+            <button onClick={() => setBotStatus("online")} disabled={toggling || bot.status === "online"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">
+              {toggling && bot.status !== "online" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Power className="w-3.5 h-3.5" />}上线
+            </button>
+            <button onClick={() => setBotStatus("offline")} disabled={toggling || bot.status !== "online"}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-medium text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40">
+              <PowerOff className="w-3.5 h-3.5" />下线
             </button>
           </div>
         </header>
+
+        {runtimeError && (
+          <div className="shrink-0 border-b border-red-200 bg-red-50 px-6 py-2 text-xs text-red-600">机器人连接失败：{runtimeError}</div>
+        )}
 
         <nav className="flex gap-0 px-6 border-b border-gray-200 bg-white shrink-0">
           {(Object.keys(TAB_LABELS) as TabKey[]).map((k) => (
