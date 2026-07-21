@@ -7,7 +7,7 @@ import {
   ChevronLeft, Bot as BotIcon, RefreshCw, Power, PowerOff,
   CheckCircle2, AlertCircle, Loader2,
   Eye, Server, Image,
-  Hammer, Plus, User, LayoutGrid, Palette,
+  Hammer, Plus, User, LayoutGrid, Palette, Sparkles, ShieldAlert,
 } from "lucide-react";
 
 interface BotData {
@@ -36,6 +36,7 @@ interface TplItem {
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
 interface DecorationStyle { id: string; name: string; preview: string; }
+interface NavigationCardTemplate { id: string; name: string; description: string; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
 
 type TabKey = "basic" | "emoji" | "build";
@@ -47,6 +48,7 @@ type BuildRequestBody = {
   duration?: string;
   sendWithUser?: boolean;
   decorationStyleId?: string;
+  navigationCardTemplateId?: string;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -94,6 +96,7 @@ export default function BotDetailPage() {
   const [templates, setTemplates] = useState<TplItem[]>([]);
   const [userTpls, setUserTpls] = useState<TplItem[]>([]);
   const [decorationStyles, setDecorationStyles] = useState<DecorationStyle[]>([]);
+  const [navigationCardTemplates, setNavigationCardTemplates] = useState<NavigationCardTemplate[]>([]);
   const [tplLoading, setTplLoading] = useState(false);
   const [selTemplate, setSelTemplate] = useState<TplItem | null>(null);
   const [importUrl, setImportUrl] = useState("");
@@ -109,6 +112,10 @@ export default function BotDetailPage() {
   const [defaultBuilderCategories, setDefaultBuilderCategories] = useState<TplCategory[]>([]);
   const [builderDirty, setBuilderDirty] = useState(false);
   const [decorationStyleId, setDecorationStyleId] = useState("none");
+  const [navigationCardTemplateId, setNavigationCardTemplateId] = useState("skip");
+  const [navigationPreview, setNavigationPreview] = useState("");
+  const [navigationPreviewLoading, setNavigationPreviewLoading] = useState(false);
+  const [navigationPreviewExpanded, setNavigationPreviewExpanded] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -170,6 +177,7 @@ export default function BotDetailPage() {
         setTemplates(data.presets || []);
         setUserTpls(data.userTemplates || []);
         setDecorationStyles(data.decorationStyles || []);
+        setNavigationCardTemplates(data.navigationCardTemplates || []);
       }
     } catch { /* ignore */ }
     finally { setTplLoading(false); }
@@ -178,6 +186,34 @@ export default function BotDetailPage() {
   useEffect(() => {
     if (tab === "build") fetchTemplates();
   }, [tab, fetchTemplates]);
+
+  useEffect(() => {
+    if (tab !== "build" || navigationCardTemplateId === "skip" || builderCategories.length === 0) {
+      setNavigationPreview("");
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setNavigationPreviewLoading(true);
+      try {
+        const res = await fetch("/api/navigation-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serverName: builderServerName || "示例服务器",
+            cardTemplateId: navigationCardTemplateId,
+            structure: builderCategories,
+          }),
+        });
+        const data = await res.json();
+        setNavigationPreview(data.content || "");
+      } catch {
+        setNavigationPreview("");
+      } finally {
+        setNavigationPreviewLoading(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [tab, navigationCardTemplateId, builderCategories, builderServerName]);
 
   const saveConfig = async () => {
     setSavingCfg(true); setCfgMsg(null);
@@ -390,6 +426,7 @@ export default function BotDetailPage() {
         duration: buildDuration,
         sendWithUser,
         decorationStyleId,
+        navigationCardTemplateId,
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -804,6 +841,50 @@ export default function BotDetailPage() {
                     </section>
                   )}
 
+                  {builderCategories.length > 0 && (
+                    <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                      <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><LayoutGrid className="h-4 w-4 text-blue-500" />导航卡片模板</div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 mt-1"><Sparkles className="h-3.5 w-3.5" />原创自适应（推荐 · 链接始终正确 · 无抄袭风险）</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <button onClick={() => setNavigationCardTemplateId("skip")}
+                          className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === "skip" ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
+                          <div className="font-medium">不发送导航</div><div className="text-slate-500 mt-0.5">跳过导航卡片</div>
+                        </button>
+                        {navigationCardTemplates.filter((template) => template.id.startsWith("eng:")).map((template) => (
+                          <button key={template.id} onClick={() => setNavigationCardTemplateId(template.id)}
+                            className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === template.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
+                            <div className="font-medium flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-blue-500" />{template.name}</div>
+                            <div className="text-slate-500 mt-0.5">{template.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 mt-3"><ShieldAlert className="h-3.5 w-3.5" />搬运真实导航（旧频道链接会自动映射，发送后请核对）</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {navigationCardTemplates.filter((template) => !template.id.startsWith("eng:") && template.id !== "skip").map((template) => (
+                          <button key={template.id} onClick={() => setNavigationCardTemplateId(template.id)}
+                            className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === template.id ? "border-amber-400 bg-amber-50 ring-1 ring-amber-200" : "border-gray-200 hover:border-amber-300"}`}>
+                            <div className="font-medium flex items-center gap-1.5"><LayoutGrid className="h-3 w-3 text-amber-500" />{template.name}</div>
+                            <div className="text-slate-500 mt-0.5">{template.description}</div>
+                          </button>
+                        ))}
+                      </div>
+                      {navigationCardTemplateId !== "skip" && (
+                        <div className={`mt-3 rounded-xl border overflow-hidden transition-colors ${navigationPreviewExpanded ? "border-blue-300 bg-white" : "border-blue-200 bg-blue-50/60 hover:bg-blue-100/60"}`}>
+                          <button type="button" onClick={() => setNavigationPreviewExpanded((value) => !value)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left text-xs font-medium text-blue-700">
+                            <Eye className="h-4 w-4 shrink-0" /><span className="truncate">导航卡片预览（基于当前排版）</span>
+                            <span className="text-[11px] font-normal text-blue-500 ml-auto">{navigationPreviewExpanded ? "点击收起" : "点击展开"}</span>
+                          </button>
+                          {navigationPreviewExpanded && (
+                            <div className="border-t border-blue-100 p-3 max-h-96 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-6 text-gray-700">
+                              {navigationPreviewLoading ? <span className="text-slate-400">生成预览中...</span> : navigationPreview || <span className="text-slate-400">暂无可预览内容</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
+
                   <section className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-3 shadow-sm">
                     <div className="flex items-center gap-2 text-sm font-semibold text-gray-800"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-blue-500 text-white text-xs font-bold">✓</span>确认搭建</div>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -811,6 +892,7 @@ export default function BotDetailPage() {
                       <div className="text-slate-500">名称</div><div>{builderServerName || "未填写"}</div>
                       <div className="text-slate-500">模板</div><div>{selTemplate?.name || (importResult ? "导入结构" : "手动配置")}</div>
                       <div className="text-slate-500">装饰</div><div>{decorationStyles.find((style) => style.id === decorationStyleId)?.name || "无装饰（原样搭建）"}</div>
+                      <div className="text-slate-500">导航卡片</div><div>{navigationCardTemplates.find((template) => template.id === navigationCardTemplateId)?.name || "不发送导航"}</div>
                       <div className="text-slate-500">频道结构</div><div>{builderCategories.length} 分组 / {builderCategories.reduce((sum, cat) => sum + cat.channels.length, 0)} 频道</div>
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">

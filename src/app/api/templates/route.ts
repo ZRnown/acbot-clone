@@ -4,6 +4,7 @@ import {
   ALL_TEMPLATES,
   DECORATION_STYLES,
   IMPORTED_USER_TEMPLATES,
+  NAVIGATION_CARD_TEMPLATES,
   getTemplateStats,
   ServerTemplate,
 } from "@/lib/server-templates";
@@ -36,7 +37,12 @@ export async function GET(req: NextRequest) {
     ...savedUserTemplates,
   ];
 
-  return NextResponse.json({ presets, userTemplates, decorationStyles: DECORATION_STYLES });
+  return NextResponse.json({
+    presets,
+    userTemplates,
+    decorationStyles: DECORATION_STYLES,
+    navigationCardTemplates: NAVIGATION_CARD_TEMPLATES,
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -61,8 +67,9 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true, template });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

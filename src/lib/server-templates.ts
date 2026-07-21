@@ -25,6 +25,18 @@ export interface DecorationStyle {
   preview: string;
 }
 
+export interface NavigationCardTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface NavigationSourceTemplate {
+  navContent: string;
+  channelMap: Record<string, string>;
+  navType?: number;
+}
+
 type ImportedTemplate = Omit<ServerTemplate, "description"> & {
   description?: string;
   baseTemplateId?: string;
@@ -63,6 +75,11 @@ export const IMPORTED_USER_TEMPLATES = builderData.myTemplates.map((template) =>
 }));
 
 export const DECORATION_STYLES: DecorationStyle[] = builderData.styles;
+
+export const NAVIGATION_CARD_TEMPLATES: NavigationCardTemplate[] = builderData.cardTemplates;
+
+export const NAVIGATION_SOURCE_TEMPLATES: Record<string, NavigationSourceTemplate> =
+  builderData.navigationTemplates;
 
 export function decorateCategoryName(name: string, styleId?: string) {
   const style = DECORATION_STYLES.find((item) => item.id === styleId);

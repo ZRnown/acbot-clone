@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel } from "@/lib/kook";
+import { createChannel, sendCardMessage } from "@/lib/kook";
+import { buildNavigationCard } from "@/lib/navigation-cards";
 
 const buildProgress = new Map<string, {
   status: string;
@@ -22,6 +23,7 @@ type BuildBody = {
   duration?: string;
   sendWithUser?: boolean;
   decorationStyleId?: string;
+  navigationCardTemplateId?: string;
 };
 
 function getErrorMessage(error: unknown) {
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
     const totalActions = template.categories.reduce(
       (sum, cat) => sum + 1 + cat.channels.length,
       0
-    );
+    ) + (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip" ? 1 : 0);
     const delayMs = getBuildDelayMs(body.duration, totalActions);
     const buildId = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -129,7 +131,9 @@ export async function POST(req: NextRequest) {
       try {
         let categoriesCreated = 0;
         let channelsCreated = 0;
+        let navigationSent = false;
         const errors: string[] = [];
+        const createdChannels: { id: string; name: string; type: number }[] = [];
 
         for (const cat of template.categories) {
           const categoryName = decorateCategoryName(
@@ -153,7 +157,7 @@ export async function POST(req: NextRequest) {
             for (const ch of cat.channels) {
               try {
                 addLog("info", `创建频道: ${ch.name}`);
-                await createChannel(
+                const createdChannel = await createChannel(
                   bot.token,
                   guildId,
                   ch.name,
@@ -161,6 +165,7 @@ export async function POST(req: NextRequest) {
                   catChannel.id,
                   undefined
                 );
+                createdChannels.push({ id: createdChannel.id, name: ch.name, type: ch.type });
                 channelsCreated++;
                 progress.current = categoriesCreated + channelsCreated;
                 progress.step = `创建频道: ${ch.name}`;
@@ -179,6 +184,36 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        if (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip") {
+          const target = createdChannels.find((channel) => channel.type === 1)
+            || createdChannels.find((channel) => channel.type === 4);
+          if (!target) {
+            errors.push("导航卡片发送失败: 没有可发送消息的文字或帖子频道");
+            addLog("error", "导航卡片发送失败: 没有可发送消息的文字或帖子频道");
+          } else {
+            try {
+              progress.step = "发送导航卡片";
+              addLog("info", `发送导航卡片到: ${target.name}`);
+              const cards = buildNavigationCard(
+                template,
+                body.serverName?.trim() || template.name,
+                body.navigationCardTemplateId,
+                createdChannels
+              );
+              if (cards) {
+                await sendCardMessage(bot.token, target.id, cards);
+                navigationSent = true;
+                addLog("success", `导航卡片已发送到: ${target.name}`);
+              }
+            } catch (e: unknown) {
+              const message = getErrorMessage(e);
+              errors.push(`导航卡片发送失败: ${message}`);
+              addLog("error", `导航卡片发送失败: ${message}`);
+            }
+          }
+          progress.current++;
+        }
+
         addLog("success", `搭建完成: 分组 ${categoriesCreated}, 频道 ${channelsCreated}`);
         progress.status = "completed";
         progress.step = "搭建完成";
@@ -186,6 +221,7 @@ export async function POST(req: NextRequest) {
           success: errors.length === 0,
           categories: categoriesCreated,
           channels: channelsCreated,
+          navigationSent,
           errors,
         };
       } catch (e: unknown) {
