@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel, createEmoji, sendCardMessage } from "@/lib/kook";
+import { createChannel, createEmoji, deleteChannel, getChannelList, sendCardMessage } from "@/lib/kook";
 import { buildNavigationCard } from "@/lib/navigation-cards";
 
 const buildProgress = new Map<string, {
@@ -26,6 +26,7 @@ type BuildBody = {
   navigationCardTemplateId?: string;
   sourceGuildId?: string;
   sourceEmojis?: Array<{ name: string; url: string }>;
+  clearExisting?: boolean;
 };
 
 function getErrorMessage(error: unknown) {
@@ -105,7 +106,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "请至少配置一个有效分组" }, { status: 400 });
     }
 
-    const totalActions = template.categories.reduce(
+    const existingChannels = body.clearExisting === false ? [] : await getChannelList(bot.token, guildId);
+    const totalActions = existingChannels.length + template.categories.reduce(
       (sum, cat) => sum + 1 + cat.channels.length,
       0
     ) + (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip" ? 1 : 0)
@@ -139,6 +141,23 @@ export async function POST(req: NextRequest) {
         const errors: string[] = [];
         const createdChannels: { id: string; name: string; type: number }[] = [];
 
+        if (body.clearExisting !== false && existingChannels.length) {
+          addLog("info", `\u6e05\u7406\u76ee\u6807\u670d\u52a1\u5668\uff1a${existingChannels.length} \u4e2a\u9891\u9053/\u5206\u7ec4`);
+          const ordered = [...existingChannels].sort((a, b) => Number(a.type === 0) - Number(b.type === 0));
+          for (const channel of ordered) {
+            try {
+              await deleteChannel(bot.token, channel.id);
+              addLog("success", `\u5df2\u5220\u9664: ${channel.name}`);
+            } catch (error) {
+              const message = getErrorMessage(error);
+              errors.push(`\u5220\u9664 [${channel.name}] \u5931\u8d25: ${message}`);
+              addLog("error", `\u5220\u9664 [${channel.name}] \u5931\u8d25: ${message}`);
+            }
+            progress.current++;
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+
         for (const cat of template.categories) {
           const categoryName = decorateCategoryName(
             cat.name.replaceAll("{name}", body.serverName?.trim() || template.name),
@@ -155,7 +174,7 @@ export async function POST(req: NextRequest) {
               undefined
             );
             categoriesCreated++;
-            progress.current = categoriesCreated + channelsCreated;
+            progress.current = existingChannels.length + categoriesCreated + channelsCreated;
             progress.step = `创建分组: ${categoryName}`;
 
             for (const ch of cat.channels) {
@@ -171,7 +190,7 @@ export async function POST(req: NextRequest) {
                 );
                 createdChannels.push({ id: createdChannel.id, name: ch.name, type: ch.type });
                 channelsCreated++;
-                progress.current = categoriesCreated + channelsCreated;
+                progress.current = existingChannels.length + categoriesCreated + channelsCreated;
                 progress.step = `创建频道: ${ch.name}`;
               } catch (e: unknown) {
                 const message = getErrorMessage(e);

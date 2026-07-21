@@ -52,6 +52,7 @@ type BuildRequestBody = {
   navigationCardTemplateId?: string;
   sourceGuildId?: string;
   sourceEmojis?: ImportedEmoji[];
+  clearExisting?: boolean;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -457,6 +458,7 @@ export default function BotDetailPage() {
         navigationCardTemplateId,
         sourceGuildId: importResult?.guildId,
         sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
+        clearExisting: true,
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -778,7 +780,7 @@ export default function BotDetailPage() {
                               <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
                                 {importResult.emojis.slice(0, 100).map((emoji, index) => (
                                   <img key={`${emoji.url}-${index}`}
-                                    src={`/api/proxy/avatar?url=${encodeURIComponent(emoji.url)}`}
+                                    src={emoji.url}
                                     title={emoji.name} alt={emoji.name}
                                     className="w-7 h-7 rounded object-cover border border-amber-200 bg-white" loading="lazy" />
                                 ))}
