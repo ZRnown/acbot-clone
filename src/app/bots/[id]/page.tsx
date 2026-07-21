@@ -35,6 +35,7 @@ interface TplItem {
   imported?: boolean;
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
+interface ImportedEmoji { name: string; url: string; }
 interface DecorationStyle { id: string; name: string; preview: string; }
 interface NavigationCardTemplate { id: string; name: string; description: string; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
@@ -49,6 +50,8 @@ type BuildRequestBody = {
   sendWithUser?: boolean;
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
+  sourceGuildId?: string;
+  sourceEmojis?: ImportedEmoji[];
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -102,7 +105,14 @@ export default function BotDetailPage() {
   const [selTemplate, setSelTemplate] = useState<TplItem | null>(null);
   const [importUrl, setImportUrl] = useState("");
   const [importLoading, setImportLoading] = useState(false);
-  const [importResult, setImportResult] = useState<{ structure: TplCategory[]; guildId: string } | null>(null);
+  const [importResult, setImportResult] = useState<{
+    structure: TplCategory[];
+    guildId: string;
+    guildName: string;
+    emojis: ImportedEmoji[];
+    warning?: string;
+  } | null>(null);
+  const [copyImportedEmojis, setCopyImportedEmojis] = useState(true);
   const [buildGuildId, setBuildGuildId] = useState("");
   const [buildLoading, setBuildLoading] = useState(false);
   const [buildError, setBuildError] = useState("");
@@ -291,13 +301,21 @@ export default function BotDetailPage() {
       });
       const data = await res.json();
       if (data.success) {
-        setImportResult({ structure: data.structure, guildId: data.guildId });
+        setImportResult({
+          structure: data.structure || [],
+          guildId: data.sourceGuildId || data.guildId,
+          guildName: data.guildName || "",
+          emojis: data.emojis || [],
+          warning: data.warning,
+        });
         setImportStructure(data.structure || []);
         setBuilderCategories(data.structure || []);
         setDefaultBuilderCategories(data.structure || []);
         setBuilderDirty(true);
         setDecorationStyleId("none");
         setSelTemplate(null);
+        setCopyImportedEmojis((data.emojis || []).length > 0);
+        if (data.guildName) setBuilderServerName(data.guildName);
       }
     } catch { /* ignore */ }
     finally { setImportLoading(false); }
@@ -437,6 +455,8 @@ export default function BotDetailPage() {
         sendWithUser,
         decorationStyleId,
         navigationCardTemplateId,
+        sourceGuildId: importResult?.guildId,
+        sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -740,6 +760,33 @@ export default function BotDetailPage() {
                           导入
                         </button>
                       </div>
+                      {importResult && (
+                        <div className="space-y-2 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3 shadow-sm">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600">
+                            <span className="font-semibold text-gray-800">{importResult.guildName || importResult.guildId}</span>
+                            <span>{importResult.structure.length} {"\u5206\u7ec4"} / {importResult.structure.reduce((sum, category) => sum + category.channels.length, 0)} {"\u9891\u9053"}</span>
+                          </div>
+                          {importResult.warning && <div className="text-xs text-amber-700">{importResult.warning}</div>}
+                          {importResult.emojis.length > 0 && (
+                            <>
+                              <label className="flex flex-wrap items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
+                                <input type="checkbox" className="rounded accent-amber-500" checked={copyImportedEmojis}
+                                  onChange={(event) => setCopyImportedEmojis(event.target.checked)} />
+                                {"\ud83c\udf81 \u642c\u8fd0\u6e90\u670d\u8868\u60c5\uff08"}{importResult.emojis.length}{" \u4e2a\uff09"}
+                                <span className="text-[11px] text-slate-500 font-normal">{"\u642d\u5efa\u65f6\u4e0b\u8f7d\u6e90\u670d\u8868\u60c5\u4e0a\u4f20\u5230\u65b0\u670d"}</span>
+                              </label>
+                              <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto">
+                                {importResult.emojis.slice(0, 100).map((emoji, index) => (
+                                  <img key={`${emoji.url}-${index}`}
+                                    src={`/api/proxy/avatar?url=${encodeURIComponent(emoji.url)}`}
+                                    title={emoji.name} alt={emoji.name}
+                                    className="w-7 h-7 rounded object-cover border border-amber-200 bg-white" loading="lazy" />
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </section>
 

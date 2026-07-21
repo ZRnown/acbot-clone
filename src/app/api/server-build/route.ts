@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel, sendCardMessage } from "@/lib/kook";
+import { createChannel, createEmoji, sendCardMessage } from "@/lib/kook";
 import { buildNavigationCard } from "@/lib/navigation-cards";
 
 const buildProgress = new Map<string, {
@@ -24,6 +24,8 @@ type BuildBody = {
   sendWithUser?: boolean;
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
+  sourceGuildId?: string;
+  sourceEmojis?: Array<{ name: string; url: string }>;
 };
 
 function getErrorMessage(error: unknown) {
@@ -106,7 +108,8 @@ export async function POST(req: NextRequest) {
     const totalActions = template.categories.reduce(
       (sum, cat) => sum + 1 + cat.channels.length,
       0
-    ) + (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip" ? 1 : 0);
+    ) + (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip" ? 1 : 0)
+      + (body.sourceEmojis?.length || 0);
     const delayMs = getBuildDelayMs(body.duration, totalActions);
     const buildId = `build_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -132,6 +135,7 @@ export async function POST(req: NextRequest) {
         let categoriesCreated = 0;
         let channelsCreated = 0;
         let navigationSent = false;
+        let emojisCreated = 0;
         const errors: string[] = [];
         const createdChannels: { id: string; name: string; type: number }[] = [];
 
@@ -214,6 +218,29 @@ export async function POST(req: NextRequest) {
           progress.current++;
         }
 
+        if (body.sourceEmojis?.length) {
+          const usedNames = new Map<string, number>();
+          for (const emoji of body.sourceEmojis.slice(0, 100)) {
+            try {
+              progress.step = `\u4e0a\u4f20\u8868\u60c5: ${emoji.name}`;
+              const response = await fetch(emoji.url);
+              if (!response.ok) throw new Error(`HTTP ${response.status}`);
+              const count = (usedNames.get(emoji.name) || 0) + 1;
+              usedNames.set(emoji.name, count);
+              const name = count === 1 ? emoji.name : `${emoji.name}_${count}`;
+              await createEmoji(bot.token, guildId, name.slice(0, 32), Buffer.from(await response.arrayBuffer()));
+              emojisCreated++;
+              addLog("success", `\u8868\u60c5 [${name}] \u4e0a\u4f20\u6210\u529f`);
+            } catch (error) {
+              const message = getErrorMessage(error);
+              errors.push(`\u8868\u60c5 [${emoji.name}] \u4e0a\u4f20\u5931\u8d25: ${message}`);
+              addLog("error", `\u8868\u60c5 [${emoji.name}] \u4e0a\u4f20\u5931\u8d25: ${message}`);
+            }
+            progress.current++;
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+          }
+        }
+
         progress.current = progress.total;
         const completelyFailed = categoriesCreated === 0;
         addLog(
@@ -227,6 +254,7 @@ export async function POST(req: NextRequest) {
           categories: categoriesCreated,
           channels: channelsCreated,
           navigationSent,
+          emojis: emojisCreated,
           errors,
         };
       } catch (e: unknown) {
