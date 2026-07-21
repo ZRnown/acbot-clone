@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel, createEmoji, deleteChannel, getChannelList, sendCardMessage } from "@/lib/kook";
+import { createChannel, createEmoji, deleteChannel, getChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
 import { buildNavigationCard } from "@/lib/navigation-cards";
 
 const buildProgress = new Map<string, {
@@ -173,6 +173,7 @@ export async function POST(req: NextRequest) {
               undefined,
               categoryIndex
             );
+            await updateChannel(bot.token, catChannel.id, { level: 100000 - categoryIndex });
             categoriesCreated++;
             progress.current = existingChannels.length + categoriesCreated + channelsCreated;
             progress.step = `创建分组: ${categoryName}`;
@@ -188,6 +189,11 @@ export async function POST(req: NextRequest) {
                   catChannel.id,
                   channelIndex
                 );
+                // KOOK may ignore ordering/parent fields during create; repair both explicitly.
+                await updateChannel(bot.token, createdChannel.id, {
+                  parent_id: catChannel.id,
+                  level: 100000 - channelIndex,
+                });
                 createdChannels.push({ id: createdChannel.id, name: ch.name, type: ch.type });
                 channelsCreated++;
                 progress.current = existingChannels.length + categoriesCreated + channelsCreated;
