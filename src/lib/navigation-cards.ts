@@ -99,16 +99,22 @@ function buildAdaptiveNavigation(
   template: ServerTemplate,
   serverName: string,
   templateId: string,
-  channels: CreatedChannel[]
+  channels: CreatedChannel[],
+  emojiIds: Map<string, string> = new Map()
 ) {
   const skin = SKINS[templateId] || SKINS["eng:starry"];
+  const firstEmoji = emojiIds.entries().next().value as [string, string] | undefined;
+  const marker = firstEmoji ? `(emj)${firstEmoji[1]}(emj)[${firstEmoji[0]}]` : "";
   const blocks = [skin.title(serverName), "点击下方频道名称即可直达对应频道。"]; 
+
+  if (marker) blocks[0] = `${marker}  ${blocks[0]}  ${marker}`;
 
   for (const category of template.categories) {
     const lines = category.channels
       .map((source) => {
         const created = findCreatedChannel(source.name, channels);
-        return created ? skin.line(source.name, channelReference(created, source.name)) : "";
+        const line = created ? skin.line(source.name, channelReference(created, source.name)) : "";
+        return line && marker ? `${marker} ${line}` : line;
       })
       .filter(Boolean);
     if (lines.length) blocks.push(skin.section(category.name.replaceAll("{name}", serverName)), lines.join("\n"));
@@ -162,7 +168,7 @@ export function buildNavigationCard(
 
   let content: string | null = null;
   if (cardTemplateId.startsWith("eng:")) {
-    content = buildAdaptiveNavigation(template, serverName, cardTemplateId, channels);
+    content = buildAdaptiveNavigation(template, serverName, cardTemplateId, channels, emojiIds);
   } else if (cardTemplateId === "random") {
     const available = Object.keys(NAVIGATION_SOURCE_TEMPLATES);
     const selected = available[Math.floor(Math.random() * available.length)];
@@ -172,7 +178,7 @@ export function buildNavigationCard(
   }
 
   if (!content) {
-    content = buildAdaptiveNavigation(template, serverName, "eng:starry", channels);
+    content = buildAdaptiveNavigation(template, serverName, "eng:starry", channels, emojiIds);
   }
 
   // Imported navigation templates may already contain a complete KOOK card array.
