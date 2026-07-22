@@ -200,6 +200,30 @@ export function buildNavigationCard(
   }];
 }
 
+export function buildEditedNavigationCards(content: string, channels: CreatedChannel[]) {
+  const mappedContent = content.replace(/\(chn\)(100000000000\d+)\(chn\)/g, (match, previewId: string) => {
+    const index = Number(previewId) - 1000000000000000;
+    const channel = channels[index];
+    return channel ? channelReference(channel, channel.name) : match;
+  });
+
+  if (mappedContent.trimStart().startsWith("[")) {
+    try {
+      const cards = JSON.parse(mappedContent);
+      if (Array.isArray(cards)) return cards;
+    } catch {
+      // Invalid edited JSON is sent as KMarkdown so the job log can expose the content safely.
+    }
+  }
+
+  return [{
+    type: "card",
+    theme: "invisible",
+    size: "lg",
+    modules: [{ type: "section", text: { type: "kmarkdown", content: mappedContent } }],
+  }];
+}
+
 function splitKMarkdown(content: string, limit = 2400) {
   if (content.length <= limit) return [content];
   const parts: string[] = [];

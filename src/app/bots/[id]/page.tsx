@@ -9,6 +9,7 @@ import {
   Eye, Server, Image,
   Hammer, Plus, User, LayoutGrid, Palette, Sparkles, ShieldAlert,
   FolderPlus, Trash2, Upload,
+  Pencil, RotateCcw,
 } from "lucide-react";
 
 interface BotData {
@@ -52,6 +53,7 @@ type BuildRequestBody = {
   sendWithUser?: boolean;
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
+  navigationContent?: string;
   sourceGuildId?: string;
   sourceServerName?: string;
   sourceEmojis?: ImportedEmoji[];
@@ -134,6 +136,8 @@ export default function BotDetailPage() {
   const [navigationPreview, setNavigationPreview] = useState("");
   const [navigationPreviewLoading, setNavigationPreviewLoading] = useState(false);
   const [navigationPreviewExpanded, setNavigationPreviewExpanded] = useState(false);
+  const [navigationEditorContent, setNavigationEditorContent] = useState("");
+  const [navigationEditorDirty, setNavigationEditorDirty] = useState(false);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
   const [saveTemplateName, setSaveTemplateName] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
@@ -271,6 +275,8 @@ export default function BotDetailPage() {
   useEffect(() => {
     if (tab !== "build" || navigationCardTemplateId === "skip" || builderCategories.length === 0) {
       setNavigationPreview("");
+      setNavigationEditorContent("");
+      setNavigationEditorDirty(false);
       return;
     }
     const timer = setTimeout(async () => {
@@ -287,6 +293,7 @@ export default function BotDetailPage() {
         });
         const data = await res.json();
         setNavigationPreview(data.content || "");
+        if (!navigationEditorDirty) setNavigationEditorContent(data.content || "");
       } catch {
         setNavigationPreview("");
       } finally {
@@ -294,7 +301,14 @@ export default function BotDetailPage() {
       }
     }, 350);
     return () => clearTimeout(timer);
-  }, [tab, navigationCardTemplateId, builderCategories, builderServerName]);
+  }, [tab, navigationCardTemplateId, builderCategories, builderServerName, navigationEditorDirty]);
+
+  const selectNavigationTemplate = (templateId: string) => {
+    setNavigationCardTemplateId(templateId);
+    setNavigationEditorDirty(false);
+    setNavigationEditorContent("");
+    if (templateId !== "skip") setNavigationPreviewExpanded(true);
+  };
 
   const saveConfig = async () => {
     setSavingCfg(true); setCfgMsg(null);
@@ -624,6 +638,7 @@ export default function BotDetailPage() {
         sendWithUser,
         decorationStyleId,
         navigationCardTemplateId,
+        navigationContent: navigationCardTemplateId !== "skip" ? navigationEditorContent : undefined,
         sourceGuildId: importResult?.guildId,
         sourceServerName: importResult?.guildName,
         sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
@@ -1191,12 +1206,12 @@ export default function BotDetailPage() {
                       <div className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><LayoutGrid className="h-4 w-4 text-blue-500" />导航卡片模板</div>
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 mt-1"><Sparkles className="h-3.5 w-3.5" />原创自适应（推荐 · 链接始终正确 · 无抄袭风险）</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                        <button onClick={() => setNavigationCardTemplateId("skip")}
+                        <button onClick={() => selectNavigationTemplate("skip")}
                           className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === "skip" ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
                           <div className="font-medium">不发送导航</div><div className="text-slate-500 mt-0.5">跳过导航卡片</div>
                         </button>
                         {navigationCardTemplates.filter((template) => template.id.startsWith("eng:")).map((template) => (
-                          <button key={template.id} onClick={() => setNavigationCardTemplateId(template.id)}
+                          <button key={template.id} onClick={() => selectNavigationTemplate(template.id)}
                             className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === template.id ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200" : "border-gray-200 hover:border-blue-300"}`}>
                             <div className="font-medium flex items-center gap-1.5"><Sparkles className="h-3 w-3 text-blue-500" />{template.name}</div>
                             <div className="text-slate-500 mt-0.5">{template.description}</div>
@@ -1206,7 +1221,7 @@ export default function BotDetailPage() {
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 mt-3"><ShieldAlert className="h-3.5 w-3.5" />搬运真实导航（旧频道链接会自动映射，发送后请核对）</div>
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                         {navigationCardTemplates.filter((template) => !template.id.startsWith("eng:") && template.id !== "skip").map((template) => (
-                          <button key={template.id} onClick={() => setNavigationCardTemplateId(template.id)}
+                          <button key={template.id} onClick={() => selectNavigationTemplate(template.id)}
                             className={`p-2.5 rounded-lg border transition-all text-xs text-left ${navigationCardTemplateId === template.id ? "border-amber-400 bg-amber-50 ring-1 ring-amber-200" : "border-gray-200 hover:border-amber-300"}`}>
                             <div className="font-medium flex items-center gap-1.5"><LayoutGrid className="h-3 w-3 text-amber-500" />{template.name}</div>
                             <div className="text-slate-500 mt-0.5">{template.description}</div>
@@ -1221,8 +1236,24 @@ export default function BotDetailPage() {
                             <span className="text-[11px] font-normal text-blue-500 ml-auto">{navigationPreviewExpanded ? "点击收起" : "点击展开"}</span>
                           </button>
                           {navigationPreviewExpanded && (
-                            <div className="border-t border-blue-100 p-3 max-h-96 overflow-y-auto whitespace-pre-wrap break-words text-xs leading-6 text-gray-700">
-                              {navigationPreviewLoading ? <span className="text-slate-400">生成预览中...</span> : navigationPreview || <span className="text-slate-400">暂无可预览内容</span>}
+                            <div className="border-t border-blue-100 p-3 space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 text-xs font-medium text-gray-700"><Pencil className="h-3.5 w-3.5" />导航内容（可编辑）</div>
+                                <button type="button" onClick={() => { setNavigationEditorContent(navigationPreview); setNavigationEditorDirty(false); }}
+                                  disabled={navigationPreviewLoading}
+                                  className="flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                                  <RotateCcw className="h-3 w-3" />恢复模板
+                                </button>
+                              </div>
+                              {navigationPreviewLoading && !navigationEditorContent ? (
+                                <div className="py-8 text-center text-xs text-slate-400">生成导航内容中...</div>
+                              ) : (
+                                <textarea value={navigationEditorContent}
+                                  onChange={(event) => { setNavigationEditorContent(event.target.value); setNavigationEditorDirty(true); }}
+                                  rows={14} spellCheck={false}
+                                  className="w-full resize-y rounded-lg border border-gray-200 bg-slate-50 px-3 py-2 font-mono text-xs leading-6 text-gray-700 focus:border-blue-400 focus:bg-white focus:outline-none" />
+                              )}
+                              <p className="text-[11px] text-slate-500">可修改标题、说明和排版；请保留 (chn)频道ID(chn) 标记，搭建时会自动替换成新服务器的真实频道链接。</p>
                             </div>
                           )}
                         </div>

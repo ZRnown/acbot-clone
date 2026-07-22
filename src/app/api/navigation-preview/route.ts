@@ -35,10 +35,17 @@ export async function POST(req: NextRequest) {
     body.cardTemplateId || "skip",
     channels
   );
+  const firstModule = cards?.length === 1 ? cards[0]?.modules?.[0] : null;
+  const editableContent = cards?.length === 1
+    && cards[0]?.modules?.length === 1
+    && firstModule?.type === "section"
+    && firstModule?.text?.type === "kmarkdown"
+    ? firstModule.text.content
+    : JSON.stringify(cards || [], null, 2);
 
   return NextResponse.json({
     success: true,
     cards: cards || [],
-    content: cards?.[0]?.modules?.[0]?.text?.content || "",
+    content: editableContent,
   });
 }

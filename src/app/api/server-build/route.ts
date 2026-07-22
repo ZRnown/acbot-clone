@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById, getLinkedPersonalAccounts } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, inferNavigationChannelName, ServerTemplate } from "@/lib/server-templates";
 import { createChannel, createEmoji, createInvite, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
-import { buildNavigationCard, splitNavigationCardMessages } from "@/lib/navigation-cards";
+import { buildEditedNavigationCards, buildNavigationCard, splitNavigationCardMessages } from "@/lib/navigation-cards";
 import { getLibrary } from "@/lib/emoji-library";
 import fs from "fs";
 import path from "path";
@@ -28,6 +28,7 @@ type BuildBody = {
   sendWithUser?: boolean;
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
+  navigationContent?: string;
   sourceGuildId?: string;
   sourceServerName?: string;
   sourceEmojis?: Array<{ name: string; url: string }>;
@@ -353,13 +354,15 @@ export async function POST(req: NextRequest) {
           } else {
             try {
               progress.step = "\u53d1\u9001\u5bfc\u822a\u5361\u7247";
-              const cards = buildNavigationCard(
-                template,
-                body.serverName?.trim() || template.name,
-                body.navigationCardTemplateId,
-                createdChannels,
-                uploadedEmojiIds
-              );
+              const cards = body.navigationContent?.trim()
+                ? buildEditedNavigationCards(body.navigationContent, createdChannels)
+                : buildNavigationCard(
+                    template,
+                    body.serverName?.trim() || template.name,
+                    body.navigationCardTemplateId,
+                    createdChannels,
+                    uploadedEmojiIds
+                  );
               if (cards) {
                 const messages = splitNavigationCardMessages(cards);
                 for (const messageCards of messages) {
