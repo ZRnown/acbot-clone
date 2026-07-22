@@ -6,6 +6,7 @@ import { buildNavigationCard } from "@/lib/navigation-cards";
 import { getLibrary } from "@/lib/emoji-library";
 import fs from "fs";
 import path from "path";
+import { sendNavigationAsPersonalAccount } from "@/lib/acbot-personal";
 
 const buildProgress = new Map<string, {
   status: string;
@@ -31,6 +32,7 @@ type BuildBody = {
   sourceEmojis?: Array<{ name: string; url: string }>;
   clearExisting?: boolean;
   decorationEmojiIds?: string[];
+  personalAccountId?: string;
 };
 
 function getErrorMessage(error: unknown) {
@@ -108,6 +110,10 @@ export async function POST(req: NextRequest) {
 
     if (template.categories.length === 0) {
       return NextResponse.json({ error: "请至少配置一个有效分组" }, { status: 400 });
+    }
+
+    if (body.sendWithUser && body.navigationCardTemplateId !== "skip" && !body.personalAccountId) {
+      return NextResponse.json({ error: "\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5728\u7ebf\u7684\u4e2a\u4eba\u8d26\u53f7" }, { status: 400 });
     }
 
     const existingChannels = body.clearExisting === false ? [] : await getAllChannelList(bot.token, guildId);
@@ -241,7 +247,11 @@ export async function POST(req: NextRequest) {
                 createdChannels
               );
               if (cards) {
-                await sendCardMessage(bot.token, target.id, cards);
+                if (body.sendWithUser && body.personalAccountId) {
+                  await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, cards);
+                } else {
+                  await sendCardMessage(bot.token, target.id, cards);
+                }
                 navigationSent = true;
                 addLog("success", `导航卡片已发送到: ${target.name}`);
               }
@@ -310,7 +320,11 @@ export async function POST(req: NextRequest) {
                 uploadedEmojiIds
               );
               if (cards) {
-                await sendCardMessage(bot.token, target.id, cards);
+                if (body.sendWithUser && body.personalAccountId) {
+                  await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, cards);
+                } else {
+                  await sendCardMessage(bot.token, target.id, cards);
+                }
                 navigationSent = true;
                 addLog("success", `\u5bfc\u822a\u5361\u7247\u5df2\u53d1\u9001\u5230: ${target.name}`);
               }

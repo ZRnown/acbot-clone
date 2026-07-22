@@ -36,6 +36,7 @@ interface TplItem {
 }
 interface TplCategory { name: string; channels: Array<{ name: string; type: number; topic?: string }>; }
 interface ImportedEmoji { name: string; url: string; }
+interface PersonalAccount { id: string; username: string; avatar?: string; online: boolean; }
 interface DecorationStyle { id: string; name: string; preview: string; }
 interface NavigationCardTemplate { id: string; name: string; description: string; }
 interface BuildProg { status: string; progress: number; currentStep: string; log: Array<{ time: string; message: string }>; }
@@ -54,6 +55,7 @@ type BuildRequestBody = {
   sourceEmojis?: ImportedEmoji[];
   clearExisting?: boolean;
   decorationEmojiIds?: string[];
+  personalAccountId?: string;
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -135,6 +137,8 @@ export default function BotDetailPage() {
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [buildDuration, setBuildDuration] = useState("fast");
   const [sendWithUser, setSendWithUser] = useState(true);
+  const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([]);
+  const [personalAccountId, setPersonalAccountId] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
@@ -165,6 +169,17 @@ export default function BotDetailPage() {
   }, [bot]);
 
   useEffect(() => { fetchGuilds(); }, [fetchGuilds]);
+
+  useEffect(() => {
+    fetch("/api/personal-accounts").then(async (response) => {
+      if (!response.ok) return;
+      const data = await response.json();
+      const accounts = data.accounts || [];
+      setPersonalAccounts(accounts);
+      const online = accounts.find((account: PersonalAccount) => account.online) || accounts[0];
+      if (online) setPersonalAccountId(online.id);
+    }).catch(() => undefined);
+  }, []);
 
   const fetchEmojiLib = useCallback(async () => {
     setEmojiLoading(true);
@@ -340,6 +355,7 @@ export default function BotDetailPage() {
     setBuilderCategories(categories);
     setDefaultBuilderCategories(categories);
     setBuilderDirty(false);
+    if (navigationCardTemplateId === "skip") setNavigationCardTemplateId("eng:starry");
   };
 
   const loadUserTemplate = (tpl: TplItem) => {
@@ -467,6 +483,7 @@ export default function BotDetailPage() {
         sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
         clearExisting: true,
         decorationEmojiIds: Array.from(emojiSelected),
+        personalAccountId: sendWithUser ? personalAccountId : undefined,
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -999,6 +1016,20 @@ export default function BotDetailPage() {
                           <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${sendWithUser ? "left-[18px]" : "left-0.5"}`} />
                         </button>
                       </div>
+                      {sendWithUser && (
+                        <div className="flex items-center gap-2">
+                          <select value={personalAccountId} onChange={(event) => setPersonalAccountId(event.target.value)}
+                            className="flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-400/30">
+                            <option value="">{"\u8bf7\u9009\u62e9\u4e2a\u4eba\u8d26\u53f7"}</option>
+                            {personalAccounts.map((account) => (
+                              <option key={account.id} value={account.id} disabled={!account.online}>
+                                {account.username}{account.online ? " (\u5728\u7ebf)" : " (\u79bb\u7ebf)"}
+                              </option>
+                            ))}
+                          </select>
+                          {personalAccounts.length === 0 && <span className="text-[11px] text-amber-600">{"\u6682\u65e0\u53ef\u7528\u4e2a\u4eba\u53f7"}</span>}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
                       <div className="flex items-center gap-2 text-xs"><span className="font-medium">搭建时长</span><span className="text-slate-500">（不选则尽快完成）</span></div>
