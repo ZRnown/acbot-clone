@@ -26,7 +26,7 @@ interface BotData {
 }
 
 interface GuildItem { id: string; name: string; icon?: string; }
-interface EmojiItem { id: string; name: string; category: string; filename: string; }
+interface EmojiItem { id: string; name: string; category: string; filename: string; group?: string; }
 interface EmojiCat { key: string; label: string; count: number; }
 interface TplItem {
   id: string; name: string; description: string; source?: string;
@@ -66,9 +66,7 @@ const TAB_LABELS: Record<TabKey, string> = {
 };
 
 const EMOJI_CAT: Record<string, string> = {
-  all: "\u5168\u90e8", imported: "\u5bfc\u5165\u8868\u60c5", line: "\u5206\u5272\u7ebf", arrow: "\u7bad\u5934",
-  star: "\u661f\u661f", heart: "\u7231\u5fc3", diamond: "\u94bb\u77f3",
-  brand: "\u54c1\u724c", wing: "\u7fc5\u8180", other: "\u5176\u4ed6",
+  imported: "\u5bfc\u5165\u8868\u60c5",
 };
 
 export default function BotDetailPage() {
@@ -94,7 +92,7 @@ export default function BotDetailPage() {
 
   const [emojis, setEmojis] = useState<EmojiItem[]>([]);
   const [emojiCats, setEmojiCats] = useState<EmojiCat[]>([]);
-  const [emojiFilter, setEmojiFilter] = useState("all");
+  const [emojiFilter, setEmojiFilter] = useState("imported");
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
   const [emojiUpGuildId, setEmojiUpGuildId] = useState("");
@@ -725,14 +723,14 @@ export default function BotDetailPage() {
                   <p className="text-xs text-slate-500 mt-1">换个分类看看，或稍后再回来选择。</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
+                <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 gap-1.5">
                   {emojis.map((emoji) => {
                     const sel = emojiSelected.has(emoji.id);
                     const thumbUrl = `/api/emoji-library/thumb/${emoji.category}/${emoji.id}`;
                     return (
                       <button key={emoji.id} onClick={() => toggleEmoji(emoji.id)}
-                        className={`relative aspect-square rounded-lg border-2 overflow-hidden transition-all bg-white ${sel ? "border-blue-500 ring-2 ring-blue-500/20 scale-95" : "border-gray-200 hover:border-blue-300"}`}
-                        title={emoji.name}
+                        className={`relative h-10 w-10 rounded-md border overflow-hidden transition-all bg-white ${sel ? "border-blue-500 ring-2 ring-blue-500/20" : "border-gray-200 hover:border-blue-300"}`}
+                        title={`${emoji.group ? `${emoji.group} / ` : ""}${emoji.name}`}
                       >
                         <img src={thumbUrl} alt={emoji.name} className="w-full h-full object-contain bg-slate-50" />
                         {sel && (
@@ -787,13 +785,13 @@ export default function BotDetailPage() {
                       {emojiUpResult.results ? (
                         <div>
                           <p className="font-medium mb-1">\u5b8c\u6210: {emojiUpResult.successCount}/{emojiUpResult.total} \u6210\u529f</p>
-                          {emojiUpResult.results.filter((r: any) => !r.success).length > 0 && (
-                            <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-                              {emojiUpResult.results.filter((r: any) => !r.success).map((r: any) => (
-                                <p key={r.id} className="text-xs text-red-400">{r.name}: {r.error}</p>
-                              ))}
-                            </div>
-                          )}
+                          <div className="mt-2 space-y-1 max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white/70 p-2 font-mono">
+                            {emojiUpResult.results.map((result: any, index: number) => (
+                              <p key={`${result.id}-${index}`} className={`text-xs ${result.success ? "text-green-700" : "text-red-600"}`}>
+                                [{result.success ? "SUCCESS" : "FAILED"}] {result.name}{result.error ? ` - ${result.error}` : ""}
+                              </p>
+                            ))}
+                          </div>
                         </div>
                       ) : (
                         <p className="text-red-400">{emojiUpResult.error}</p>

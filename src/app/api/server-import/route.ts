@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
     try {
       const accountScan = await scanWithAcbot(guildId);
       if (accountScan) {
-        const libraryImported = await importRemoteEmojis(accountScan.sourceGuildId, accountScan.emojis);
+        const libraryImported = await importRemoteEmojis(accountScan.sourceGuildId, accountScan.emojis, accountScan.guildName);
         return NextResponse.json({ success: true, ...accountScan, libraryImported });
       }
     } catch (error) {
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
       name: emoji.name,
       url: `https://img.kookapp.cn/emojis/${guildId}/${emoji.id}`,
     }));
-    const libraryImported = await importRemoteEmojis(guildId, emojis);
+    const libraryImported = await importRemoteEmojis(guildId, emojis, guild.name);
     return NextResponse.json({
       success: true,
       guildId,

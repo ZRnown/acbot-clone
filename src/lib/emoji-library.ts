@@ -19,6 +19,7 @@ export interface EmojiItem {
   name: string;
   category: string;
   filename: string;
+  group?: string;
 }
 
 export interface EmojiCategory {
@@ -40,7 +41,8 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
 
 export async function importRemoteEmojis(
   guildId: string,
-  emojis: Array<{ name: string; url: string }>
+  emojis: Array<{ name: string; url: string }>,
+  groupName?: string
 ) {
   ensureDirs();
   const items = getLibrary();
@@ -61,7 +63,7 @@ export async function importRemoteEmojis(
           : contentType.includes("jpeg") ? ".jpg" : ".png";
       const filename = `${guildId}_${hash}${extension}`;
       fs.writeFileSync(path.join(IMG_DIR, "imported", filename), Buffer.from(await response.arrayBuffer()));
-      items.push({ id, name: emoji.name || hash, category: "imported", filename });
+      items.push({ id, name: emoji.name || hash, category: "imported", filename, group: groupName || guildId });
       itemIds.add(id);
       imported++;
     } catch {
