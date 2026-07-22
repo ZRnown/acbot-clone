@@ -89,8 +89,7 @@ function findCreatedChannel(sourceName: string, channels: CreatedChannel[]) {
 }
 
 function channelReference(channel: CreatedChannel | undefined, fallbackName: string) {
-  // KOOK channel mentions do not resolve for voice channels in KMarkdown.
-  return channel && (channel.type === 1 || channel.type === 4)
+  return channel
     ? `(chn)${channel.id}(chn)`
     : fallbackName;
 }
@@ -132,11 +131,31 @@ function buildSourceNavigation(templateId: string, channels: CreatedChannel[]) {
     });
 }
 
+function buildMappedSourceNavigation(
+  templateId: string,
+  channels: CreatedChannel[],
+  emojiIds: Map<string, string>
+) {
+  const source = NAVIGATION_SOURCE_TEMPLATES[templateId];
+  if (!source) return null;
+  return source.navContent
+    .replace(/\(emj\)([^()]*)\(emj\)\[([^\]]*)\]/g, (match, _oldId: string, name: string) => {
+      const newId = emojiIds.get(name);
+      return newId ? `(emj)${newId}(emj)[${name}]` : match;
+    })
+    .replace(/\(chn\)(\d+)\(chn\)/g, (_match, oldId: string) => {
+      const sourceName = source.channelMap[oldId];
+      if (!sourceName) return "";
+      return channelReference(findCreatedChannel(sourceName, channels), sourceName);
+    });
+}
+
 export function buildNavigationCard(
   template: ServerTemplate,
   serverName: string,
   cardTemplateId: string,
-  channels: CreatedChannel[]
+  channels: CreatedChannel[],
+  emojiIds: Map<string, string> = new Map()
 ) {
   if (!cardTemplateId || cardTemplateId === "skip") return null;
 
@@ -146,9 +165,9 @@ export function buildNavigationCard(
   } else if (cardTemplateId === "random") {
     const available = Object.keys(NAVIGATION_SOURCE_TEMPLATES);
     const selected = available[Math.floor(Math.random() * available.length)];
-    content = selected ? buildSourceNavigation(selected, channels) : null;
+    content = selected ? buildMappedSourceNavigation(selected, channels, emojiIds) : null;
   } else if (cardTemplateId !== "clone" && cardTemplateId !== "random") {
-    content = buildSourceNavigation(cardTemplateId, channels);
+    content = buildMappedSourceNavigation(cardTemplateId, channels, emojiIds);
   }
 
   if (!content) {

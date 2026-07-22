@@ -53,6 +53,7 @@ type BuildRequestBody = {
   sourceGuildId?: string;
   sourceEmojis?: ImportedEmoji[];
   clearExisting?: boolean;
+  decorationEmojiIds?: string[];
 };
 
 const TAB_LABELS: Record<TabKey, string> = {
@@ -180,6 +181,12 @@ export default function BotDetailPage() {
   useEffect(() => {
     if (tab === "emoji" || tab === "build") fetchEmojiLib();
   }, [tab, emojiFilter, fetchEmojiLib]);
+
+  useEffect(() => {
+    if (tab === "build" && importResult && emojis.length && emojiSelected.size === 0) {
+      setEmojiSelected(new Set(emojis.slice(0, 21).map((emoji) => emoji.id)));
+    }
+  }, [tab, importResult, emojis, emojiSelected.size]);
 
   const fetchTemplates = useCallback(async () => {
     setTplLoading(true);
@@ -459,6 +466,7 @@ export default function BotDetailPage() {
         sourceGuildId: importResult?.guildId,
         sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
         clearExisting: true,
+        decorationEmojiIds: Array.from(emojiSelected),
       };
       const res = await fetch("/api/server-build", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
