@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById, getLinkedPersonalAccounts } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
 import { createChannel, createEmoji, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
-import { buildNavigationCard } from "@/lib/navigation-cards";
+import { buildNavigationCard, splitNavigationCardMessages } from "@/lib/navigation-cards";
 import { getLibrary } from "@/lib/emoji-library";
 import fs from "fs";
 import path from "path";
@@ -253,10 +253,14 @@ export async function POST(req: NextRequest) {
                 createdChannels
               );
               if (cards) {
-                if (body.sendWithUser && body.personalAccountId) {
-                  await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, cards);
-                } else {
-                  await sendCardMessage(bot.token, target.id, cards);
+                const messages = splitNavigationCardMessages(cards);
+                for (const messageCards of messages) {
+                  if (body.sendWithUser && body.personalAccountId) {
+                    await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, messageCards);
+                  } else {
+                    await sendCardMessage(bot.token, target.id, messageCards);
+                  }
+                  await new Promise((resolve) => setTimeout(resolve, 500));
                 }
                 navigationSent = true;
                 addLog("success", `导航卡片已发送到: ${target.name}`);
@@ -326,10 +330,14 @@ export async function POST(req: NextRequest) {
                 uploadedEmojiIds
               );
               if (cards) {
-                if (body.sendWithUser && body.personalAccountId) {
-                  await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, cards);
-                } else {
-                  await sendCardMessage(bot.token, target.id, cards);
+                const messages = splitNavigationCardMessages(cards);
+                for (const messageCards of messages) {
+                  if (body.sendWithUser && body.personalAccountId) {
+                    await sendNavigationAsPersonalAccount(body.personalAccountId, target.id, messageCards);
+                  } else {
+                    await sendCardMessage(bot.token, target.id, messageCards);
+                  }
+                  await new Promise((resolve) => setTimeout(resolve, 500));
                 }
                 navigationSent = true;
                 addLog("success", `\u5bfc\u822a\u5361\u7247\u5df2\u53d1\u9001\u5230: ${target.name}`);

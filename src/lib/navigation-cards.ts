@@ -192,3 +192,49 @@ export function buildNavigationCard(
     modules: [{ type: "section", text: { type: "kmarkdown", content } }],
   }];
 }
+
+function splitKMarkdown(content: string, limit = 2400) {
+  if (content.length <= limit) return [content];
+  const parts: string[] = [];
+  let current = "";
+  for (const paragraph of content.split("\n\n")) {
+    const next = current ? `${current}\n\n${paragraph}` : paragraph;
+    if (next.length <= limit) {
+      current = next;
+      continue;
+    }
+    if (current) parts.push(current);
+    if (paragraph.length <= limit) {
+      current = paragraph;
+    } else {
+      for (let index = 0; index < paragraph.length; index += limit) {
+        parts.push(paragraph.slice(index, index + limit));
+      }
+      current = "";
+    }
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
+export function splitNavigationCardMessages(cards: unknown[]): unknown[][] {
+  const messages: unknown[][] = [];
+  for (const rawCard of cards) {
+    const card = rawCard as Record<string, any>;
+    const modules = Array.isArray(card.modules) ? card.modules : [];
+    const baseCard = { ...card };
+    delete baseCard.modules;
+    for (const module of modules) {
+      const content = module?.text?.type === "kmarkdown" ? module.text.content : null;
+      const pieces = typeof content === "string" ? splitKMarkdown(content) : [null];
+      for (const piece of pieces) {
+        const nextModule = piece === null
+          ? module
+          : { ...module, text: { ...module.text, content: piece } };
+        messages.push([{ ...baseCard, modules: [nextModule] }]);
+      }
+    }
+    if (modules.length === 0) messages.push([card]);
+  }
+  return messages.length ? messages : [cards];
+}
