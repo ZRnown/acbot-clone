@@ -8,6 +8,7 @@ import {
   getCategoryCounts,
   getCategories,
   removeFromLibrary,
+  removeGroupFromLibrary,
 } from "@/lib/emoji-library";
 import { verifyToken } from "@/lib/db";
 
@@ -60,6 +61,7 @@ export async function POST(req: NextRequest) {
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
       const category = String(form.get("category") || "");
+      const group = String(form.get("group") || "");
       const files = form.getAll("files").filter((value): value is File => value instanceof File);
       if (!category || files.length === 0) return NextResponse.json({ error: "请选择分类和图片" }, { status: 400 });
       const uploaded = [];
@@ -75,7 +77,7 @@ export async function POST(req: NextRequest) {
           failed.push({ name: file.name, error: "仅支持 PNG、JPG、GIF、WebP" });
           continue;
         }
-        uploaded.push(addUploadedEmoji(category, file.name.replace(/\.[^.]+$/, ""), format.extension, buffer));
+        uploaded.push(addUploadedEmoji(category, file.name.replace(/\.[^.]+$/, ""), format.extension, buffer, group));
       }
       return NextResponse.json({ success: uploaded.length > 0, uploaded, failed });
     }
@@ -89,9 +91,10 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   if (!requireUser(req)) return NextResponse.json({ error: "未登录" }, { status: 401 });
   try {
-    const { type, key, id } = await req.json() as { type?: "category" | "emoji"; key?: string; id?: string };
+    const { type, key, id, group } = await req.json() as { type?: "category" | "emoji" | "group"; key?: string; id?: string; group?: string };
     if (type === "category" && key) deleteCategory(key);
     else if (type === "emoji" && id) removeFromLibrary(id);
+    else if (type === "group" && group) removeGroupFromLibrary(group);
     else return NextResponse.json({ error: "删除参数无效" }, { status: 400 });
     return NextResponse.json({ success: true });
   } catch (error) {

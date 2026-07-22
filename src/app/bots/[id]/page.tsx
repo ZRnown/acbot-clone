@@ -29,7 +29,7 @@ interface BotData {
 
 interface GuildItem { id: string; name: string; icon?: string; }
 interface EmojiItem { id: string; name: string; category: string; filename: string; group?: string; }
-interface EmojiCat { key: string; label: string; count: number; }
+interface EmojiCat { key: string; label: string; count: number; kind?: "custom" | "group"; }
 interface TplItem {
   id: string; name: string; description: string; source?: string;
   categoryCount?: number; channelCount?: number; groups?: number; channels?: number;
@@ -91,7 +91,6 @@ export default function BotDetailPage() {
 
   const [emojis, setEmojis] = useState<EmojiItem[]>([]);
   const [emojiCats, setEmojiCats] = useState<EmojiCat[]>([]);
-  const [emojiFilter, setEmojiFilter] = useState("all");
   const [emojiGroupFilter, setEmojiGroupFilter] = useState("all");
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
@@ -234,18 +233,15 @@ export default function BotDetailPage() {
   const fetchEmojiLib = useCallback(async () => {
     setEmojiLoading(true);
     try {
-      const url = emojiFilter === "all"
-        ? "/api/emoji-library"
-        : `/api/emoji-library?category=${emojiFilter}`;
-      const res = await fetch(url);
+      const res = await fetch("/api/emoji-library");
       if (res.ok) { const data = await res.json(); setEmojis(data.emojis || []); setEmojiCats(data.categories || []); }
     } catch { /* ignore */ }
     finally { setEmojiLoading(false); }
-  }, [emojiFilter]);
+  }, []);
 
   useEffect(() => {
     if (tab === "emoji" || tab === "build") fetchEmojiLib();
-  }, [tab, emojiFilter, fetchEmojiLib]);
+  }, [tab, fetchEmojiLib]);
 
   useEffect(() => {
     if (tab === "build" && importResult && emojis.length && emojiSelected.size === 0) {
@@ -373,8 +369,7 @@ export default function BotDetailPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "新建分类失败");
       setNewEmojiCategory("");
-      setEmojiFilter(data.category.key);
-      setEmojiGroupFilter("all");
+      setEmojiGroupFilter(data.category.label);
       setEmojiManageMessage({ ok: true, text: `已新建分类“${data.category.label}”` });
       await fetchEmojiLib();
     } catch (error) {
@@ -383,17 +378,18 @@ export default function BotDetailPage() {
   };
 
   const deleteEmojiCategory = async (category: EmojiCat) => {
-    if (category.key === "imported") return;
     if (!window.confirm(`确定删除分类“${category.label}”及其中 ${category.count} 个表情吗？此操作不可恢复。`)) return;
     setEmojiManageLoading(true); setEmojiManageMessage(null);
     try {
       const response = await fetch("/api/emoji-library", {
         method: "DELETE", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "category", key: category.key }),
+        body: JSON.stringify(category.kind === "group"
+          ? { type: "group", group: category.label }
+          : { type: "category", key: category.key }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "删除分类失败");
-      setEmojiFilter("all"); setEmojiGroupFilter("all"); clearEmojiSelection();
+      setEmojiGroupFilter("all"); clearEmojiSelection();
       setEmojiManageMessage({ ok: true, text: `已删除分类“${category.label}”` });
       await fetchEmojiLib();
     } catch (error) {
@@ -403,11 +399,17 @@ export default function BotDetailPage() {
 
   const uploadLocalEmojis = async (files: FileList | null) => {
     if (!files?.length) return;
-    const category = emojiFilter === "all" ? "imported" : emojiFilter;
+    if (emojiGroupFilter === "all") {
+      setEmojiManageMessage({ ok: false, text: "请先选择一个表情分类再上传" });
+      return;
+    }
+    const customCategory = emojiCats.find((category) => category.key !== "imported" && category.label === emojiGroupFilter);
+    const category = customCategory?.key || "imported";
     setEmojiManageLoading(true); setEmojiManageMessage(null);
     try {
       const form = new FormData();
       form.append("category", category);
+      form.append("group", emojiGroupFilter);
       Array.from(files).forEach((file) => form.append("files", file));
       const response = await fetch("/api/emoji-library", { method: "POST", body: form });
       const data = await response.json();
@@ -824,42 +826,48 @@ export default function BotDetailPage() {
                     className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
                     <FolderPlus className="h-4 w-4" />新建分类
                   </button>
-                  <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">
+                  <label className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-white ${emojiGroupFilter === "all" ? "cursor-not-allowed bg-blue-300" : "cursor-pointer bg-blue-600 hover:bg-blue-500"}`}>
                     <Upload className="h-4 w-4" />上传本地表情
                     <input type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
+                      disabled={emojiGroupFilter === "all"}
                       onChange={(event) => { void uploadLocalEmojis(event.target.files); event.currentTarget.value = ""; }} className="hidden" />
                   </label>
                 </div>
-                <p className="text-xs text-slate-500">上传到当前分类；选择“全部”时上传到“导入表情”。支持 PNG、JPG、GIF、WebP，单个文件最大 10MB。</p>
+                <p className="text-xs text-slate-500">先选择分类，再上传本地表情。支持 PNG、JPG、GIF、WebP，单个文件最大 10MB。</p>
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => { setEmojiFilter("all"); setEmojiGroupFilter("all"); }}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${emojiFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>全部</button>
-                  {emojiCats.map((category) => (
-                    <div key={category.key} className={`flex items-center rounded-lg ${emojiFilter === category.key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
-                      <button onClick={() => { setEmojiFilter(category.key); setEmojiGroupFilter("all"); }} className="px-3 py-1.5 text-xs font-medium">
-                        {category.label} ({category.count})
-                      </button>
-                      {category.key !== "imported" && (
+                  <button onClick={() => setEmojiGroupFilter("all")}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${emojiGroupFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>全部 ({emojis.length})</button>
+                  {(() => {
+                    const customCategories = emojiCats.filter((category) => category.key !== "imported");
+                    const groups = Array.from(new Set(emojis.map(getEmojiGroupName)));
+                    const visibleCategories: EmojiCat[] = groups.map((group) => {
+                      const custom = customCategories.find((category) => category.label === group);
+                      return {
+                        key: custom?.key || `group:${group}`,
+                        label: group,
+                        count: emojis.filter((emoji) => getEmojiGroupName(emoji) === group).length,
+                        kind: custom ? "custom" : "group",
+                      };
+                    });
+                    for (const custom of customCategories) {
+                      if (!groups.includes(custom.label)) visibleCategories.push({ ...custom, kind: "custom" });
+                    }
+                    return visibleCategories.map((category) => (
+                      <div key={category.key} className={`flex items-center rounded-lg ${emojiGroupFilter === category.label ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+                        <button onClick={() => setEmojiGroupFilter(category.label)} className="px-3 py-1.5 text-xs font-medium">
+                          {category.label} ({category.count})
+                        </button>
                         <button onClick={() => void deleteEmojiCategory(category)} title={`删除分类 ${category.label}`} className="mr-1 rounded p-1 hover:bg-red-500 hover:text-white">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ));
+                  })()}
                 </div>
                 {emojiManageMessage && <p className={`text-xs ${emojiManageMessage.ok ? "text-green-700" : "text-red-600"}`}>{emojiManageMessage.text}</p>}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                {Array.from(new Set(emojis.map(getEmojiGroupName))).length > 1 && (
-                  <button onClick={() => setEmojiGroupFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>全部</button>
-                )}
-                {Array.from(new Set(emojis.map(getEmojiGroupName))).map((group) => (
-                  <button key={group} onClick={() => setEmojiGroupFilter(group)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === group ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{group}</button>
-                ))}
-                <div className="flex-1" />
+              <div className="flex flex-wrap justify-end items-center gap-2 bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
                 <button onClick={selectAllEmojis} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26] transition">全选</button>
                 <button onClick={clearEmojiSelection} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26] transition">清除</button>
                 <span className="text-xs text-slate-500">{emojiSelected.size} 已选</span>

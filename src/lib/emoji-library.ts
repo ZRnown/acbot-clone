@@ -175,19 +175,27 @@ export function removeFromLibrary(id: string) {
   return filtered;
 }
 
+export function removeGroupFromLibrary(group: string) {
+  const items = getLibrary();
+  const matched = items.filter((item) => item.group === group);
+  for (const item of matched) deleteEmojiFile(item);
+  saveLibrary(items.filter((item) => item.group !== group));
+  return matched.length;
+}
+
 function deleteEmojiFile(item: EmojiItem) {
   const filePath = path.join(IMG_DIR, item.category, item.filename);
   if (fs.existsSync(filePath)) fs.rmSync(filePath, { force: true });
 }
 
-export function addUploadedEmoji(category: string, name: string, extension: string, buffer: Buffer): EmojiItem {
+export function addUploadedEmoji(category: string, name: string, extension: string, buffer: Buffer, group?: string): EmojiItem {
   const categoryInfo = getCategories().find((item) => item.key === category);
   if (!categoryInfo) throw new Error("上传分类不存在");
   const id = `local_${crypto.randomBytes(10).toString("hex")}`;
   const filename = `${id}${extension}`;
   fs.mkdirSync(path.join(IMG_DIR, category), { recursive: true });
   fs.writeFileSync(path.join(IMG_DIR, category, filename), buffer);
-  const item = { id, name: name.trim().slice(0, 32) || id, category, filename, group: categoryInfo.label };
+  const item = { id, name: name.trim().slice(0, 32) || id, category, filename, group: group?.trim() || categoryInfo.label };
   addToLibrary(item);
   return item;
 }
