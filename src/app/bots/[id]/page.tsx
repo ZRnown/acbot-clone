@@ -52,6 +52,7 @@ type BuildRequestBody = {
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
   sourceGuildId?: string;
+  sourceServerName?: string;
   sourceEmojis?: ImportedEmoji[];
   clearExisting?: boolean;
   decorationEmojiIds?: string[];
@@ -65,7 +66,7 @@ const TAB_LABELS: Record<TabKey, string> = {
 };
 
 const EMOJI_CAT: Record<string, string> = {
-  all: "\u5168\u90e8", line: "\u5206\u5272\u7ebf", arrow: "\u7bad\u5934",
+  all: "\u5168\u90e8", imported: "\u5bfc\u5165\u8868\u60c5", line: "\u5206\u5272\u7ebf", arrow: "\u7bad\u5934",
   star: "\u661f\u661f", heart: "\u7231\u5fc3", diamond: "\u94bb\u77f3",
   brand: "\u54c1\u724c", wing: "\u7fc5\u8180", other: "\u5176\u4ed6",
 };
@@ -98,6 +99,7 @@ export default function BotDetailPage() {
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
   const [emojiUpGuildId, setEmojiUpGuildId] = useState("");
   const [emojiPrefix, setEmojiPrefix] = useState("");
+  const [emojiNames, setEmojiNames] = useState<Record<string, string>>({});
   const [emojiUploading, setEmojiUploading] = useState(false);
   const [emojiUpResult, setEmojiUpResult] = useState<any>(null);
 
@@ -349,7 +351,13 @@ export default function BotDetailPage() {
     try {
       const res = await fetch("/api/emoji-library/upload", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ botId: bot.id, guildId: emojiUpGuildId, emojiIds: Array.from(emojiSelected), namePrefix: emojiPrefix || undefined }),
+        body: JSON.stringify({
+          botId: bot.id,
+          guildId: emojiUpGuildId,
+          emojiIds: Array.from(emojiSelected),
+          namePrefix: emojiPrefix || undefined,
+          names: emojiNames,
+        }),
       });
       const data = await res.json();
       setEmojiUpResult(data);
@@ -383,6 +391,7 @@ export default function BotDetailPage() {
         setSelTemplate(null);
         setCopyImportedEmojis((data.emojis || []).length > 0);
         if (data.guildName) setBuilderServerName(data.guildName);
+        await fetchEmojiLib();
       }
     } catch { /* ignore */ }
     finally { setImportLoading(false); }
@@ -524,6 +533,7 @@ export default function BotDetailPage() {
         decorationStyleId,
         navigationCardTemplateId,
         sourceGuildId: importResult?.guildId,
+        sourceServerName: importResult?.guildName,
         sourceEmojis: copyImportedEmojis ? importResult?.emojis : undefined,
         clearExisting: true,
         decorationEmojiIds: Array.from(emojiSelected),
@@ -738,6 +748,18 @@ export default function BotDetailPage() {
 
               {emojiSelected.size > 0 && (
                 <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3 shadow-sm">
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto rounded-lg border border-gray-100 bg-gray-50/60 p-2">
+                    {emojis.filter((emoji) => emojiSelected.has(emoji.id)).map((emoji) => (
+                      <div key={emoji.id} className="grid grid-cols-[32px_minmax(0,1fr)] items-center gap-2">
+                        <img src={`/api/emoji-library/thumb/${emoji.category}/${emoji.id}`} alt={emoji.name} className="h-8 w-8 rounded object-contain bg-white" />
+                        <input value={emojiNames[emoji.id] ?? emoji.name}
+                          onChange={(event) => setEmojiNames((current) => ({ ...current, [emoji.id]: event.target.value }))}
+                          maxLength={32}
+                          className="w-full rounded-md border border-gray-200 bg-white px-2 py-1.5 text-xs focus:outline-none focus:border-blue-400"
+                          aria-label={`${emoji.name} rename`} />
+                      </div>
+                    ))}
+                  </div>
                   <h3 className="text-sm font-semibold text-[#171d26]">上传到服务器</h3>
                   <div className="flex flex-wrap gap-3 items-end">
                     <div>

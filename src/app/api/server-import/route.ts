@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById } from "@/lib/db";
 import { getAllChannelList, getAllEmojis, getGuild } from "@/lib/kook";
+import { importRemoteEmojis } from "@/lib/emoji-library";
 
 type ImportedEmoji = { name: string; url: string };
 
@@ -72,7 +73,10 @@ export async function POST(req: NextRequest) {
     const guildId = parseGuildId(guildIdOrUrl);
     try {
       const accountScan = await scanWithAcbot(guildId);
-      if (accountScan) return NextResponse.json({ success: true, ...accountScan });
+      if (accountScan) {
+        const libraryImported = await importRemoteEmojis(accountScan.sourceGuildId, accountScan.emojis);
+        return NextResponse.json({ success: true, ...accountScan, libraryImported });
+      }
     } catch (error) {
       console.error("Account import scan failed, using bot API fallback:", error);
     }
@@ -105,6 +109,7 @@ export async function POST(req: NextRequest) {
       name: emoji.name,
       url: `https://img.kookapp.cn/emojis/${guildId}/${emoji.id}`,
     }));
+    const libraryImported = await importRemoteEmojis(guildId, emojis);
     return NextResponse.json({
       success: true,
       guildId,
@@ -117,6 +122,7 @@ export async function POST(req: NextRequest) {
       channelCount: structure.reduce((sum, category) => sum + category.channels.length, 0),
       scanMode: "bot",
       warning: "\u673a\u5668\u4eba API \u53ea\u80fd\u5bfc\u5165\u8be5\u673a\u5668\u4eba\u6709\u6743\u67e5\u770b\u7684\u9891\u9053\u3002",
+      libraryImported,
     });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 });

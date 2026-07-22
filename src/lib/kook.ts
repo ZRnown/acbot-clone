@@ -311,7 +311,10 @@ export async function createEmoji(
   formData.append("guild_id", guildId);
   formData.append("name", name);
 
-  const blob = new Blob([new Uint8Array(emojiBuffer)], { type: "image/png" });
+  const mime = emojiBuffer.subarray(0, 6).toString("ascii").startsWith("GIF") ? "image/gif"
+    : emojiBuffer.subarray(0, 4).toString("hex") === "52494646" ? "image/webp"
+      : emojiBuffer.subarray(0, 3).toString("hex") === "ffd8ff" ? "image/jpeg" : "image/png";
+  const blob = new Blob([new Uint8Array(emojiBuffer)], { type: mime });
   formData.append("emoji", blob);
 
   return kookRequest(token, `/guild-emoji/create`, {

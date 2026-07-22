@@ -29,6 +29,7 @@ type BuildBody = {
   decorationStyleId?: string;
   navigationCardTemplateId?: string;
   sourceGuildId?: string;
+  sourceServerName?: string;
   sourceEmojis?: Array<{ name: string; url: string }>;
   clearExisting?: boolean;
   decorationEmojiIds?: string[];
@@ -59,13 +60,19 @@ function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
   if (!template) return undefined;
 
   const configuredName = body.serverName?.trim() || template.name;
+  const replaceServerName = (name: string | undefined) => {
+    let result = name?.trim() || "";
+    result = result.replaceAll("XX\u7535\u7ade", configuredName);
+    if (body.sourceServerName?.trim()) result = result.replaceAll(body.sourceServerName.trim(), configuredName);
+    return result;
+  };
   const categories = template.categories
     .map((cat) => ({
-      name: cat.name?.trim().replaceAll("XX\u7535\u7ade", configuredName),
+      name: replaceServerName(cat.name),
       channels: (cat.channels || [])
         .map((ch) => ({
           ...ch,
-          name: ch.name?.trim().replaceAll("XX\u7535\u7ade", configuredName),
+          name: replaceServerName(ch.name),
           type: [1, 2, 4].includes(Number(ch.type)) ? Number(ch.type) : 1,
         }))
         .filter((ch) => ch.name),

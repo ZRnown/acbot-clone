@@ -8,6 +8,7 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const LIBRARY_FILE = path.join(DATA_DIR, "emoji-library.json");
@@ -26,6 +27,7 @@ export interface EmojiCategory {
 }
 
 export const EMOJI_CATEGORIES: EmojiCategory[] = [
+  { key: "imported", label: "\u5bfc\u5165\u8868\u60c5" },
   { key: "line", label: "分割线" },
   { key: "arrow", label: "箭头" },
   { key: "star", label: "星星" },
@@ -35,6 +37,40 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
   { key: "wing", label: "翅膀" },
   { key: "other", label: "其他" },
 ];
+
+export async function importRemoteEmojis(
+  guildId: string,
+  emojis: Array<{ name: string; url: string }>
+) {
+  ensureDirs();
+  const items = getLibrary();
+  const itemIds = new Set(items.map((item) => item.id));
+  let imported = 0;
+  for (const emoji of emojis) {
+    try {
+      const url = new URL(emoji.url);
+      if (url.protocol !== "https:" || url.hostname !== "img.kookapp.cn") continue;
+      const hash = crypto.createHash("sha1").update(emoji.url).digest("hex").slice(0, 16);
+      const id = `imported_${guildId}_${hash}`;
+      if (itemIds.has(id)) continue;
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const contentType = response.headers.get("content-type") || "image/png";
+      const extension = contentType.includes("gif") ? ".gif"
+        : contentType.includes("webp") ? ".webp"
+          : contentType.includes("jpeg") ? ".jpg" : ".png";
+      const filename = `${guildId}_${hash}${extension}`;
+      fs.writeFileSync(path.join(IMG_DIR, "imported", filename), Buffer.from(await response.arrayBuffer()));
+      items.push({ id, name: emoji.name || hash, category: "imported", filename });
+      itemIds.add(id);
+      imported++;
+    } catch {
+      // Keep importing the remaining emojis when one source image is unavailable.
+    }
+  }
+  if (imported) saveLibrary(items);
+  return imported;
+}
 
 function ensureDirs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

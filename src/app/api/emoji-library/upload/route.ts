@@ -13,11 +13,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { botId, guildId, emojiIds, namePrefix } = body as {
+    const { botId, guildId, emojiIds, namePrefix, names } = body as {
       botId: string;
       guildId: string;
       emojiIds: string[];
       namePrefix?: string;
+      names?: Record<string, string>;
     };
 
     if (!botId || !guildId || !emojiIds || !Array.isArray(emojiIds) || emojiIds.length === 0) {
@@ -57,10 +58,11 @@ export async function POST(req: NextRequest) {
         const buffer = fs.readFileSync(filePath);
 
         // Apply naming: prefix + original name, or just prefix
-        let emojiName = emoji.name;
+        let emojiName = names?.[emoji.id]?.trim() || emoji.name;
         if (namePrefix) {
-          emojiName = `${namePrefix}${emoji.name}`;
+          emojiName = `${namePrefix}${emojiName}`;
         }
+        emojiName = emojiName.slice(0, 32);
 
         await createEmoji(bot.token, guildId, emojiName, buffer);
         results.push({ id: emoji.id, name: emojiName, success: true });
