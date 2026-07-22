@@ -8,6 +8,7 @@ import {
   CheckCircle2, AlertCircle, Loader2,
   Eye, Server, Image,
   Hammer, Plus, User, LayoutGrid, Palette, Sparkles, ShieldAlert,
+  FolderPlus, Trash2, Upload,
 } from "lucide-react";
 
 interface BotData {
@@ -88,7 +89,7 @@ export default function BotDetailPage() {
 
   const [emojis, setEmojis] = useState<EmojiItem[]>([]);
   const [emojiCats, setEmojiCats] = useState<EmojiCat[]>([]);
-  const [emojiFilter] = useState("imported");
+  const [emojiFilter, setEmojiFilter] = useState("all");
   const [emojiGroupFilter, setEmojiGroupFilter] = useState("all");
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
@@ -98,6 +99,9 @@ export default function BotDetailPage() {
   const [emojiUploading, setEmojiUploading] = useState(false);
   const [emojiUpResult, setEmojiUpResult] = useState<any>(null);
   const [clearTargetEmojis, setClearTargetEmojis] = useState(false);
+  const [newEmojiCategory, setNewEmojiCategory] = useState("");
+  const [emojiManageLoading, setEmojiManageLoading] = useState(false);
+  const [emojiManageMessage, setEmojiManageMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [templates, setTemplates] = useState<TplItem[]>([]);
   const [userTpls, setUserTpls] = useState<TplItem[]>([]);
@@ -343,6 +347,82 @@ export default function BotDetailPage() {
     emojis.filter((emoji) => emojiGroupFilter === "all" || getEmojiGroupName(emoji) === emojiGroupFilter).map((emoji) => emoji.id)
   ));
   const clearEmojiSelection = () => setEmojiSelected(new Set());
+
+  const createEmojiCategory = async () => {
+    if (!newEmojiCategory.trim()) return;
+    setEmojiManageLoading(true); setEmojiManageMessage(null);
+    try {
+      const response = await fetch("/api/emoji-library", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ label: newEmojiCategory.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "新建分类失败");
+      setNewEmojiCategory("");
+      setEmojiFilter(data.category.key);
+      setEmojiGroupFilter("all");
+      setEmojiManageMessage({ ok: true, text: `已新建分类“${data.category.label}”` });
+      await fetchEmojiLib();
+    } catch (error) {
+      setEmojiManageMessage({ ok: false, text: error instanceof Error ? error.message : String(error) });
+    } finally { setEmojiManageLoading(false); }
+  };
+
+  const deleteEmojiCategory = async (category: EmojiCat) => {
+    if (category.key === "imported") return;
+    if (!window.confirm(`确定删除分类“${category.label}”及其中 ${category.count} 个表情吗？此操作不可恢复。`)) return;
+    setEmojiManageLoading(true); setEmojiManageMessage(null);
+    try {
+      const response = await fetch("/api/emoji-library", {
+        method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "category", key: category.key }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "删除分类失败");
+      setEmojiFilter("all"); setEmojiGroupFilter("all"); clearEmojiSelection();
+      setEmojiManageMessage({ ok: true, text: `已删除分类“${category.label}”` });
+      await fetchEmojiLib();
+    } catch (error) {
+      setEmojiManageMessage({ ok: false, text: error instanceof Error ? error.message : String(error) });
+    } finally { setEmojiManageLoading(false); }
+  };
+
+  const uploadLocalEmojis = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const category = emojiFilter === "all" ? "imported" : emojiFilter;
+    setEmojiManageLoading(true); setEmojiManageMessage(null);
+    try {
+      const form = new FormData();
+      form.append("category", category);
+      Array.from(files).forEach((file) => form.append("files", file));
+      const response = await fetch("/api/emoji-library", { method: "POST", body: form });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "上传失败");
+      const failed = data.failed?.length || 0;
+      setEmojiManageMessage({
+        ok: data.uploaded?.length > 0,
+        text: `已上传 ${data.uploaded?.length || 0} 个${failed ? `，失败 ${failed} 个：${data.failed.map((item: any) => `${item.name}（${item.error}）`).join("；")}` : ""}`,
+      });
+      await fetchEmojiLib();
+    } catch (error) {
+      setEmojiManageMessage({ ok: false, text: error instanceof Error ? error.message : String(error) });
+    } finally { setEmojiManageLoading(false); }
+  };
+
+  const deleteLibraryEmoji = async (emoji: EmojiItem) => {
+    if (!window.confirm(`确定从表情库删除“${emoji.name}”吗？`)) return;
+    const response = await fetch("/api/emoji-library", {
+      method: "DELETE", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "emoji", id: emoji.id }),
+    });
+    const data = await response.json();
+    if (!response.ok) setEmojiManageMessage({ ok: false, text: data.error || "删除表情失败" });
+    else {
+      setEmojiSelected((current) => { const next = new Set(current); next.delete(emoji.id); return next; });
+      setEmojiManageMessage({ ok: true, text: `已删除表情“${emoji.name}”` });
+      await fetchEmojiLib();
+    }
+  };
 
   const uploadEmojis = async () => {
     if (!bot || !emojiUpGuildId || emojiSelected.size === 0) return;
@@ -716,6 +796,45 @@ export default function BotDetailPage() {
           {tab === "emoji" && (
             <div className="space-y-5">
 
+              <div className="space-y-3 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-48 flex-1">
+                    <label className="block text-xs text-slate-500 mb-1">新建表情分类</label>
+                    <input value={newEmojiCategory} onChange={(event) => setNewEmojiCategory(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Enter") void createEmojiCategory(); }}
+                      maxLength={30} placeholder="输入分类名称"
+                      className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <button onClick={createEmojiCategory} disabled={emojiManageLoading || !newEmojiCategory.trim()}
+                    className="flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
+                    <FolderPlus className="h-4 w-4" />新建分类
+                  </button>
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">
+                    <Upload className="h-4 w-4" />上传本地表情
+                    <input type="file" multiple accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
+                      onChange={(event) => { void uploadLocalEmojis(event.target.files); event.currentTarget.value = ""; }} className="hidden" />
+                  </label>
+                </div>
+                <p className="text-xs text-slate-500">上传到当前分类；选择“全部”时上传到“导入表情”。支持 PNG、JPG、GIF、WebP，单个文件最大 10MB。</p>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => { setEmojiFilter("all"); setEmojiGroupFilter("all"); }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-medium ${emojiFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>全部</button>
+                  {emojiCats.map((category) => (
+                    <div key={category.key} className={`flex items-center rounded-lg ${emojiFilter === category.key ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"}`}>
+                      <button onClick={() => { setEmojiFilter(category.key); setEmojiGroupFilter("all"); }} className="px-3 py-1.5 text-xs font-medium">
+                        {category.label} ({category.count})
+                      </button>
+                      {category.key !== "imported" && (
+                        <button onClick={() => void deleteEmojiCategory(category)} title={`删除分类 ${category.label}`} className="mr-1 rounded p-1 hover:bg-red-500 hover:text-white">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {emojiManageMessage && <p className={`text-xs ${emojiManageMessage.ok ? "text-green-700" : "text-red-600"}`}>{emojiManageMessage.text}</p>}
+              </div>
+
               <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                 {Array.from(new Set(emojis.map(getEmojiGroupName))).length > 1 && (
                   <button onClick={() => setEmojiGroupFilter("all")}
@@ -745,7 +864,8 @@ export default function BotDetailPage() {
                     const sel = emojiSelected.has(emoji.id);
                     const thumbUrl = `/api/emoji-library/thumb/${emoji.category}/${emoji.id}`;
                     return (
-                      <button key={emoji.id} onClick={() => toggleEmoji(emoji.id)}
+                      <div key={emoji.id} className="group relative h-10 w-10">
+                      <button onClick={() => toggleEmoji(emoji.id)}
                         className={`relative h-10 w-10 rounded-md border overflow-hidden transition-all bg-white ${sel ? "border-blue-500 ring-2 ring-blue-500/20" : "border-gray-200 hover:border-blue-300"}`}
                         title={`${getEmojiGroupName(emoji)} / ${emoji.name}`}
                       >
@@ -756,6 +876,11 @@ export default function BotDetailPage() {
                           </div>
                         )}
                       </button>
+                      <button onClick={() => void deleteLibraryEmoji(emoji)} title={`删除 ${emoji.name}`}
+                        className="absolute -right-1 -top-1 z-10 hidden h-5 w-5 items-center justify-center rounded-full bg-red-600 text-white shadow group-hover:flex">
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                      </div>
                     );
                   })}
                 </div>
