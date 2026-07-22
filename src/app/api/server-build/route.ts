@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById, getLinkedPersonalAccounts } from "@/lib/db";
-import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
+import { ALL_TEMPLATES, decorateCategoryName, inferNavigationChannelName, ServerTemplate } from "@/lib/server-templates";
 import { createChannel, createEmoji, createInvite, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
 import { buildNavigationCard, splitNavigationCardMessages } from "@/lib/navigation-cards";
 import { getLibrary } from "@/lib/emoji-library";
@@ -72,7 +72,7 @@ function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
     }))
     .filter((cat) => cat.name);
 
-  return { ...template, categories };
+  return { ...template, categories, navigationTargetName: inferNavigationChannelName(categories) };
 }
 
 function getBuildDelayMs(duration: string | undefined, totalActions: number) {
@@ -84,10 +84,15 @@ function getBuildDelayMs(duration: string | undefined, totalActions: number) {
   return Math.max(500, Math.floor((minutes * 60_000) / totalActions));
 }
 
-function findNavigationTarget(channels: Array<{ id: string; name: string; type: number }>) {
-  return channels.find((channel) =>
-    (channel.type === 1 || channel.type === 4) && /\u5bfc\u822a|\u4f20\u9001|\u6307\u5f15|\u6307\u8def/.test(channel.name)
-  ) || channels.find((channel) => channel.type === 1)
+function findNavigationTarget(
+  channels: Array<{ id: string; name: string; type: number }>,
+  targetName?: string
+) {
+  const compact = (name: string) => name.replace(/\s+/g, "").toLowerCase();
+  return (targetName ? channels.find((channel) => compact(channel.name) === compact(targetName)) : undefined)
+    || channels.find((channel) =>
+      (channel.type === 1 || channel.type === 4) && /\u5bfc\u822a|\u4f20\u9001|\u6307\u5f15|\u6307\u8def/.test(compact(channel.name))
+    ) || channels.find((channel) => channel.type === 1)
     || channels.find((channel) => channel.type === 4);
 }
 
@@ -258,7 +263,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (Boolean(false) && body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip") {
-          const target = findNavigationTarget(createdChannels);
+          const target = findNavigationTarget(createdChannels, template.navigationTargetName);
           if (!target) {
             errors.push("导航卡片发送失败: 没有可发送消息的文字或帖子频道");
             addLog("error", "导航卡片发送失败: 没有可发送消息的文字或帖子频道");
@@ -335,7 +340,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip") {
-          const target = findNavigationTarget(createdChannels);
+          const target = findNavigationTarget(createdChannels, template.navigationTargetName);
           if (!target) {
             errors.push("\u5bfc\u822a\u5361\u7247\u53d1\u9001\u5931\u8d25\uff1a\u6ca1\u6709\u53ef\u53d1\u9001\u6d88\u606f\u7684\u6587\u5b57\u9891\u9053");
           } else {
