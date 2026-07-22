@@ -48,13 +48,21 @@ export async function importRemoteEmojis(
   const items = getLibrary();
   const itemIds = new Set(items.map((item) => item.id));
   let imported = 0;
+  let metadataUpdated = false;
   for (const emoji of emojis) {
     try {
       const url = new URL(emoji.url);
       if (url.protocol !== "https:" || url.hostname !== "img.kookapp.cn") continue;
       const hash = crypto.createHash("sha1").update(emoji.url).digest("hex").slice(0, 16);
       const id = `imported_${guildId}_${hash}`;
-      if (itemIds.has(id)) continue;
+      if (itemIds.has(id)) {
+        const existing = items.find((item) => item.id === id);
+        if (existing && !existing.group && groupName) {
+          existing.group = groupName;
+          metadataUpdated = true;
+        }
+        continue;
+      }
       const response = await fetch(url);
       if (!response.ok) continue;
       const contentType = response.headers.get("content-type") || "image/png";
@@ -70,7 +78,7 @@ export async function importRemoteEmojis(
       // Keep importing the remaining emojis when one source image is unavailable.
     }
   }
-  if (imported) saveLibrary(items);
+  if (imported || metadataUpdated) saveLibrary(items);
   return imported;
 }
 

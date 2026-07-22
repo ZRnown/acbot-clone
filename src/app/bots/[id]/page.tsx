@@ -65,10 +65,6 @@ const TAB_LABELS: Record<TabKey, string> = {
   build: "\u670d\u52a1\u5668\u642d\u5efa",
 };
 
-const EMOJI_CAT: Record<string, string> = {
-  imported: "\u5bfc\u5165\u8868\u60c5",
-};
-
 export default function BotDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -92,7 +88,8 @@ export default function BotDetailPage() {
 
   const [emojis, setEmojis] = useState<EmojiItem[]>([]);
   const [emojiCats, setEmojiCats] = useState<EmojiCat[]>([]);
-  const [emojiFilter, setEmojiFilter] = useState("imported");
+  const [emojiFilter] = useState("imported");
+  const [emojiGroupFilter, setEmojiGroupFilter] = useState("all");
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
   const [emojiUpGuildId, setEmojiUpGuildId] = useState("");
@@ -340,7 +337,9 @@ export default function BotDetailPage() {
   const toggleEmoji = (eid: string) => {
     setEmojiSelected(prev => { const n = new Set(prev); if (n.has(eid)) n.delete(eid); else n.add(eid); return n; });
   };
-  const selectAllEmojis = () => setEmojiSelected(new Set(emojis.map(e => e.id)));
+  const selectAllEmojis = () => setEmojiSelected(new Set(
+    emojis.filter((emoji) => emojiGroupFilter === "all" || emoji.group === emojiGroupFilter).map((emoji) => emoji.id)
+  ));
   const clearEmojiSelection = () => setEmojiSelected(new Set());
 
   const uploadEmojis = async () => {
@@ -703,10 +702,13 @@ export default function BotDetailPage() {
             <div className="space-y-5">
 
               <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                {(Object.keys(EMOJI_CAT) as string[]).map((cat) => (
-                  <button key={cat} onClick={() => setEmojiFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiFilter === cat ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26]"}`}
-                  >{EMOJI_CAT[cat]}</button>
+                {Array.from(new Set(emojis.map((emoji) => emoji.group).filter(Boolean) as string[])).length > 1 && (
+                  <button onClick={() => setEmojiGroupFilter("all")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>全部</button>
+                )}
+                {Array.from(new Set(emojis.map((emoji) => emoji.group).filter(Boolean) as string[])).map((group) => (
+                  <button key={group} onClick={() => setEmojiGroupFilter(group)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === group ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{group}</button>
                 ))}
                 <div className="flex-1" />
                 <button onClick={selectAllEmojis} className="px-3 py-1.5 text-xs rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-[#171d26] transition">全选</button>
@@ -724,7 +726,7 @@ export default function BotDetailPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 gap-1.5">
-                  {emojis.map((emoji) => {
+                  {emojis.filter((emoji) => emojiGroupFilter === "all" || emoji.group === emojiGroupFilter).map((emoji) => {
                     const sel = emojiSelected.has(emoji.id);
                     const thumbUrl = `/api/emoji-library/thumb/${emoji.category}/${emoji.id}`;
                     return (
