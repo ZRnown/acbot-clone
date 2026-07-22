@@ -142,6 +142,7 @@ export default function BotDetailPage() {
   const [personalQr, setPersonalQr] = useState("");
   const [personalLoginLoading, setPersonalLoginLoading] = useState(false);
   const [personalLoginError, setPersonalLoginError] = useState("");
+  const [personalQrExpired, setPersonalQrExpired] = useState(false);
   const personalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -188,7 +189,7 @@ export default function BotDetailPage() {
   useEffect(() => { fetchPersonalAccounts(); }, [fetchPersonalAccounts]);
 
   const startPersonalLogin = async () => {
-    setPersonalLoginLoading(true); setPersonalLoginError(""); setPersonalQr("");
+    setPersonalLoginLoading(true); setPersonalLoginError(""); setPersonalQr(""); setPersonalQrExpired(false);
     try {
       const response = await fetch("/api/personal-login/start", { method: "POST" });
       const data = await response.json();
@@ -205,10 +206,12 @@ export default function BotDetailPage() {
           personalPollRef.current = null;
           setPersonalQr(""); setPersonalLoginLoading(false);
           await fetchPersonalAccounts();
-        } else if (attempts >= 60) {
+        } else if (attempts >= 60 || status.status?.ok === false) {
           if (personalPollRef.current) clearInterval(personalPollRef.current);
           personalPollRef.current = null;
           setPersonalLoginLoading(false);
+          setPersonalQr("");
+          setPersonalQrExpired(true);
           setPersonalLoginError("\u4e8c\u7ef4\u7801\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u626b\u7801");
         }
       }, 2000);
@@ -1070,7 +1073,7 @@ export default function BotDetailPage() {
                           </select>
                           <button type="button" onClick={startPersonalLogin} disabled={personalLoginLoading}
                             className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-100 disabled:opacity-50">
-                            {personalLoginLoading ? "\u7b49\u5f85\u626b\u7801" : "+ \u6dfb\u52a0\u8d26\u53f7"}
+                            {personalLoginLoading ? "\u7b49\u5f85\u626b\u7801" : personalQrExpired ? "\u91cd\u65b0\u751f\u6210\u4e8c\u7ef4\u7801" : "+ \u6dfb\u52a0\u8d26\u53f7"}
                           </button>
                         </div>
                       )}
@@ -1081,7 +1084,12 @@ export default function BotDetailPage() {
                           <div className="text-[11px] text-slate-500">{"\u767b\u5f55\u6210\u529f\u540e\u4f1a\u81ea\u52a8\u5173\u95ed\u4e8c\u7ef4\u7801\u5e76\u52a0\u5165\u8d26\u53f7\u5217\u8868"}</div>
                         </div>
                       )}
-                      {personalLoginError && <div className="text-xs text-red-600">{personalLoginError}</div>}
+                      {personalLoginError && (
+                        <div className="flex items-center justify-between gap-2 text-xs text-red-600">
+                          <span>{personalLoginError}</span>
+                          {personalQrExpired && <button type="button" onClick={startPersonalLogin} className="rounded-md bg-red-50 px-2 py-1 font-medium hover:bg-red-100">{"\u91cd\u65b0\u751f\u6210"}</button>}
+                        </div>
+                      )}
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
                       <div className="flex items-center gap-2 text-xs"><span className="font-medium">搭建时长</span><span className="text-slate-500">（不选则尽快完成）</span></div>
