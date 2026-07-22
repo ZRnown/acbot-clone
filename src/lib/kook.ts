@@ -323,6 +323,14 @@ export async function createEmoji(
   });
 }
 
+export async function deleteEmoji(token: string, emojiId: string): Promise<void> {
+  await kookRequest(token, `/guild-emoji/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: emojiId }),
+  });
+}
+
 // === Migration Orchestrator ===
 export interface MigrationOptions {
   copyCategories: boolean;

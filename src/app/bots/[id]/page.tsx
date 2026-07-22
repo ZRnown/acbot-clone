@@ -97,6 +97,7 @@ export default function BotDetailPage() {
   const [emojiNames, setEmojiNames] = useState<Record<string, string>>({});
   const [emojiUploading, setEmojiUploading] = useState(false);
   const [emojiUpResult, setEmojiUpResult] = useState<any>(null);
+  const [clearTargetEmojis, setClearTargetEmojis] = useState(false);
 
   const [templates, setTemplates] = useState<TplItem[]>([]);
   const [userTpls, setUserTpls] = useState<TplItem[]>([]);
@@ -345,6 +346,7 @@ export default function BotDetailPage() {
 
   const uploadEmojis = async () => {
     if (!bot || !emojiUpGuildId || emojiSelected.size === 0) return;
+    if (clearTargetEmojis && !window.confirm("上传前将删除目标服务器现有的全部表情，且无法恢复。确定继续吗？")) return;
     setEmojiUploading(true); setEmojiUpResult(null);
     try {
       const res = await fetch("/api/emoji-library/upload", {
@@ -355,6 +357,7 @@ export default function BotDetailPage() {
           emojiIds: Array.from(emojiSelected),
           namePrefix: emojiPrefix || undefined,
           names: emojiNames,
+          clearExisting: clearTargetEmojis,
         }),
       });
       const data = await res.json();
@@ -793,19 +796,41 @@ export default function BotDetailPage() {
                       {emojiUploading ? "上传中..." : `上传 ${emojiSelected.size} 个表情`}
                     </button>
                   </div>
+                  <label className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+                    <input
+                      type="checkbox"
+                      checked={clearTargetEmojis}
+                      onChange={(event) => setClearTargetEmojis(event.target.checked)}
+                      disabled={emojiUploading}
+                      className="mt-0.5 h-4 w-4 accent-red-600"
+                    />
+                    <span>
+                      <span className="block font-medium">上传前删除目标服务器全部表情</span>
+                      <span className="block text-xs text-red-700">此操作不可恢复；删除完成并确认无残留后才会开始上传。</span>
+                    </span>
+                  </label>
 
                   {emojiUpResult && (
                     <div className={`p-3 rounded-lg text-sm ${emojiUpResult.success !== false ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
                       {emojiUpResult.results ? (
                         <div>
                           <p className="font-medium mb-1">
-                            {emojiUpResult.status === "running" ? `\u4e0a\u4f20\u4e2d: ${emojiUpResult.current}/${emojiUpResult.total}` : `\u5b8c\u6210: ${emojiUpResult.successCount}/${emojiUpResult.total} \u6210\u529f`}
+                            {emojiUpResult.status === "running"
+                              ? `上传中: ${emojiUpResult.current}/${emojiUpResult.total}`
+                              : emojiUpResult.status === "failed"
+                                ? `上传已停止: ${emojiUpResult.error || "发生错误"}`
+                                : `完成: ${emojiUpResult.successCount}/${emojiUpResult.total} 成功`}
                           </p>
                           <div className="mt-2 space-y-1 max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white/70 p-2 font-mono">
                             {emojiUpResult.status === "running" && emojiUpResult.results.length === 0 && <p className="text-xs text-blue-600">[START] \u6b63\u5728\u51c6\u5907\u4e0a\u4f20...</p>}
+                            {emojiUpResult.logs?.map((log: any, index: number) => (
+                              <p key={`log-${index}`} className={`text-xs ${log.level === "error" ? "text-red-600" : log.level === "success" ? "text-green-700" : "text-blue-600"}`}>
+                                [{log.level === "error" ? "失败" : log.level === "success" ? "成功" : "信息"}] {log.message}
+                              </p>
+                            ))}
                             {emojiUpResult.results.map((result: any, index: number) => (
                               <p key={`${result.id}-${index}`} className={`text-xs ${result.success ? "text-green-700" : "text-red-600"}`}>
-                                [{result.success ? "SUCCESS" : "FAILED"}] {result.name}{result.error ? ` - ${result.error}` : ""}
+                                [{result.success ? "成功" : "失败"}] {result.name}{result.error ? ` - ${result.error}` : ""}
                               </p>
                             ))}
                           </div>
