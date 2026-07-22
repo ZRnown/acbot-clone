@@ -28,6 +28,28 @@ export async function getPersonalAccounts(): Promise<PersonalAccount[]> {
   return data.accounts || [];
 }
 
+export async function startPersonalLogin() {
+  const token = await getAcbotToken();
+  const response = await fetch(`${ACBOT_BASE}/api/server-builder/personal-login-open`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: "{}",
+    cache: "no-store",
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) throw new Error(data.error || "Failed to start QR login");
+  return data as { ok: true; qrDataUrl: string; content: string };
+}
+
+export async function getPersonalLoginStatus() {
+  const token = await getAcbotToken();
+  const response = await fetch(`${ACBOT_BASE}/api/server-builder/personal-login-open/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  return response.json();
+}
+
 export async function sendNavigationAsPersonalAccount(
   personalAccountId: string,
   targetChannelId: string,

@@ -139,6 +139,10 @@ export default function BotDetailPage() {
   const [sendWithUser, setSendWithUser] = useState(true);
   const [personalAccounts, setPersonalAccounts] = useState<PersonalAccount[]>([]);
   const [personalAccountId, setPersonalAccountId] = useState("");
+  const [personalQr, setPersonalQr] = useState("");
+  const [personalLoginLoading, setPersonalLoginLoading] = useState(false);
+  const [personalLoginError, setPersonalLoginError] = useState("");
+  const personalPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
 
@@ -170,8 +174,8 @@ export default function BotDetailPage() {
 
   useEffect(() => { fetchGuilds(); }, [fetchGuilds]);
 
-  useEffect(() => {
-    fetch("/api/personal-accounts").then(async (response) => {
+  const fetchPersonalAccounts = useCallback(async () => {
+    await fetch("/api/personal-accounts").then(async (response) => {
       if (!response.ok) return;
       const data = await response.json();
       const accounts = data.accounts || [];
@@ -179,6 +183,43 @@ export default function BotDetailPage() {
       const online = accounts.find((account: PersonalAccount) => account.online) || accounts[0];
       if (online) setPersonalAccountId(online.id);
     }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => { fetchPersonalAccounts(); }, [fetchPersonalAccounts]);
+
+  const startPersonalLogin = async () => {
+    setPersonalLoginLoading(true); setPersonalLoginError(""); setPersonalQr("");
+    try {
+      const response = await fetch("/api/personal-login/start", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "QR login failed");
+      setPersonalQr(data.qrDataUrl || "");
+      let attempts = 0;
+      if (personalPollRef.current) clearInterval(personalPollRef.current);
+      personalPollRef.current = setInterval(async () => {
+        attempts++;
+        const statusResponse = await fetch("/api/personal-login/status");
+        const status = await statusResponse.json();
+        if (status.complete) {
+          if (personalPollRef.current) clearInterval(personalPollRef.current);
+          personalPollRef.current = null;
+          setPersonalQr(""); setPersonalLoginLoading(false);
+          await fetchPersonalAccounts();
+        } else if (attempts >= 60) {
+          if (personalPollRef.current) clearInterval(personalPollRef.current);
+          personalPollRef.current = null;
+          setPersonalLoginLoading(false);
+          setPersonalLoginError("\u4e8c\u7ef4\u7801\u5df2\u8fc7\u671f\uff0c\u8bf7\u91cd\u65b0\u626b\u7801");
+        }
+      }, 2000);
+    } catch (error) {
+      setPersonalLoginLoading(false);
+      setPersonalLoginError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  useEffect(() => () => {
+    if (personalPollRef.current) clearInterval(personalPollRef.current);
   }, []);
 
   const fetchEmojiLib = useCallback(async () => {
@@ -1027,9 +1068,20 @@ export default function BotDetailPage() {
                               </option>
                             ))}
                           </select>
-                          {personalAccounts.length === 0 && <span className="text-[11px] text-amber-600">{"\u6682\u65e0\u53ef\u7528\u4e2a\u4eba\u53f7"}</span>}
+                          <button type="button" onClick={startPersonalLogin} disabled={personalLoginLoading}
+                            className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-100 disabled:opacity-50">
+                            {personalLoginLoading ? "\u7b49\u5f85\u626b\u7801" : "+ \u6dfb\u52a0\u8d26\u53f7"}
+                          </button>
                         </div>
                       )}
+                      {sendWithUser && personalQr && (
+                        <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-center space-y-2">
+                          <img src={personalQr} alt="KOOK login QR code" className="mx-auto h-48 w-48 rounded bg-white p-2" />
+                          <div className="text-xs font-medium text-gray-700">{"\u8bf7\u4f7f\u7528 KOOK \u624b\u673a\u7aef\u626b\u7801\u5e76\u786e\u8ba4\u767b\u5f55"}</div>
+                          <div className="text-[11px] text-slate-500">{"\u767b\u5f55\u6210\u529f\u540e\u4f1a\u81ea\u52a8\u5173\u95ed\u4e8c\u7ef4\u7801\u5e76\u52a0\u5165\u8d26\u53f7\u5217\u8868"}</div>
+                        </div>
+                      )}
+                      {personalLoginError && <div className="text-xs text-red-600">{personalLoginError}</div>}
                     </div>
                     <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-2">
                       <div className="flex items-center gap-2 text-xs"><span className="font-medium">搭建时长</span><span className="text-slate-500">（不选则尽快完成）</span></div>

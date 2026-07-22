@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyToken, getBotById } from "@/lib/db";
+import { verifyToken, getBotById, getLinkedPersonalAccounts } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
 import { createChannel, createEmoji, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
 import { buildNavigationCard } from "@/lib/navigation-cards";
@@ -114,6 +114,12 @@ export async function POST(req: NextRequest) {
 
     if (body.sendWithUser && body.navigationCardTemplateId !== "skip" && !body.personalAccountId) {
       return NextResponse.json({ error: "\u8bf7\u5148\u9009\u62e9\u4e00\u4e2a\u5728\u7ebf\u7684\u4e2a\u4eba\u8d26\u53f7" }, { status: 400 });
+    }
+    if (body.sendWithUser && body.personalAccountId) {
+      const linked = await getLinkedPersonalAccounts(payload.id);
+      if (!linked.some((account) => account.id === body.personalAccountId)) {
+        return NextResponse.json({ error: "\u4e2a\u4eba\u8d26\u53f7\u672a\u5728\u5f53\u524d\u7cfb\u7edf\u5b8c\u6210\u7ed1\u5b9a" }, { status: 403 });
+      }
     }
 
     const existingChannels = body.clearExisting === false ? [] : await getAllChannelList(bot.token, guildId);

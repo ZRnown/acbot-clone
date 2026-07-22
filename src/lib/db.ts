@@ -29,6 +29,14 @@ export interface UserTemplate {
   createdAt: string;
 }
 
+export interface LinkedPersonalAccount {
+  id: string;
+  ownerId: string;
+  username: string;
+  avatar?: string;
+  createdAt: string;
+}
+
 export interface Bot {
   id: string;
   ownerId: string;
@@ -88,6 +96,7 @@ interface Database {
   users: User[];
   bots: Bot[];
   templates: UserTemplate[];
+  personalAccounts: LinkedPersonalAccount[];
 }
 
 async function readDb(): Promise<Database> {
@@ -98,9 +107,10 @@ async function readDb(): Promise<Database> {
       users: data.users || [],
       bots: data.bots || [],
       templates: data.templates || [],
+      personalAccounts: data.personalAccounts || [],
     };
   } catch {
-    return { users: [], bots: [], templates: [] };
+    return { users: [], bots: [], templates: [], personalAccounts: [] };
   }
 }
 
@@ -343,6 +353,21 @@ export function deleteUserTemplate(ownerId: string, templateId: string): boolean
     return true;
   }
   return false;
+}
+
+export async function getLinkedPersonalAccounts(ownerId: string) {
+  const db = await readDb();
+  return db.personalAccounts.filter((account) => account.ownerId === ownerId);
+}
+
+export async function linkPersonalAccount(ownerId: string, account: Omit<LinkedPersonalAccount, "ownerId" | "createdAt">) {
+  const db = await readDb();
+  const existing = db.personalAccounts.find((item) => item.ownerId === ownerId && item.id === account.id);
+  if (existing) return existing;
+  const linked = { ...account, ownerId, createdAt: new Date().toISOString() };
+  db.personalAccounts.push(linked);
+  await writeDb(db);
+  return linked;
 }
 
 export { readDb, writeDb };
