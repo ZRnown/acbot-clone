@@ -337,8 +337,9 @@ export default function BotDetailPage() {
   const toggleEmoji = (eid: string) => {
     setEmojiSelected(prev => { const n = new Set(prev); if (n.has(eid)) n.delete(eid); else n.add(eid); return n; });
   };
+  const getEmojiGroupName = (emoji: EmojiItem) => emoji.group || importResult?.guildName || "\u672a\u547d\u540d\u670d\u52a1\u5668";
   const selectAllEmojis = () => setEmojiSelected(new Set(
-    emojis.filter((emoji) => emojiGroupFilter === "all" || emoji.group === emojiGroupFilter).map((emoji) => emoji.id)
+    emojis.filter((emoji) => emojiGroupFilter === "all" || getEmojiGroupName(emoji) === emojiGroupFilter).map((emoji) => emoji.id)
   ));
   const clearEmojiSelection = () => setEmojiSelected(new Set());
 
@@ -357,8 +358,19 @@ export default function BotDetailPage() {
         }),
       });
       const data = await res.json();
-      setEmojiUpResult(data);
-      if (data.success && data.successCount > 0) setEmojiSelected(new Set());
+      if (!res.ok || !data.jobId) throw new Error(data.error || "Failed to start upload");
+      setEmojiUpResult({ status: "running", total: emojiSelected.size, current: 0, successCount: 0, results: [] });
+      while (true) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const progressResponse = await fetch(`/api/emoji-library/upload?jobId=${encodeURIComponent(data.jobId)}`);
+        const progress = await progressResponse.json();
+        if (!progressResponse.ok) throw new Error(progress.error || "Failed to read upload progress");
+        setEmojiUpResult(progress);
+        if (progress.status !== "running") {
+          if (progress.successCount > 0) setEmojiSelected(new Set());
+          break;
+        }
+      }
     } catch (e: any) { setEmojiUpResult({ success: false, error: e.message }); }
     finally { setEmojiUploading(false); }
   };
@@ -702,11 +714,11 @@ export default function BotDetailPage() {
             <div className="space-y-5">
 
               <div className="flex flex-wrap items-center gap-2 bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                {Array.from(new Set(emojis.map((emoji) => emoji.group).filter(Boolean) as string[])).length > 1 && (
+                {Array.from(new Set(emojis.map(getEmojiGroupName))).length > 1 && (
                   <button onClick={() => setEmojiGroupFilter("all")}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === "all" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>全部</button>
                 )}
-                {Array.from(new Set(emojis.map((emoji) => emoji.group).filter(Boolean) as string[])).map((group) => (
+                {Array.from(new Set(emojis.map(getEmojiGroupName))).map((group) => (
                   <button key={group} onClick={() => setEmojiGroupFilter(group)}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${emojiGroupFilter === group ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{group}</button>
                 ))}
@@ -725,14 +737,14 @@ export default function BotDetailPage() {
                   <p className="text-xs text-slate-500 mt-1">换个分类看看，或稍后再回来选择。</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 gap-1.5">
-                  {emojis.filter((emoji) => emojiGroupFilter === "all" || emoji.group === emojiGroupFilter).map((emoji) => {
+                <div className="flex flex-wrap content-start gap-1.5">
+                  {emojis.filter((emoji) => emojiGroupFilter === "all" || getEmojiGroupName(emoji) === emojiGroupFilter).map((emoji) => {
                     const sel = emojiSelected.has(emoji.id);
                     const thumbUrl = `/api/emoji-library/thumb/${emoji.category}/${emoji.id}`;
                     return (
                       <button key={emoji.id} onClick={() => toggleEmoji(emoji.id)}
                         className={`relative h-10 w-10 rounded-md border overflow-hidden transition-all bg-white ${sel ? "border-blue-500 ring-2 ring-blue-500/20" : "border-gray-200 hover:border-blue-300"}`}
-                        title={`${emoji.group ? `${emoji.group} / ` : ""}${emoji.name}`}
+                        title={`${getEmojiGroupName(emoji)} / ${emoji.name}`}
                       >
                         <img src={thumbUrl} alt={emoji.name} className="w-full h-full object-contain bg-slate-50" />
                         {sel && (
@@ -786,8 +798,11 @@ export default function BotDetailPage() {
                     <div className={`p-3 rounded-lg text-sm ${emojiUpResult.success !== false ? "bg-green-500/10 border border-green-500/30" : "bg-red-500/10 border border-red-500/30"}`}>
                       {emojiUpResult.results ? (
                         <div>
-                          <p className="font-medium mb-1">\u5b8c\u6210: {emojiUpResult.successCount}/{emojiUpResult.total} \u6210\u529f</p>
+                          <p className="font-medium mb-1">
+                            {emojiUpResult.status === "running" ? `\u4e0a\u4f20\u4e2d: ${emojiUpResult.current}/${emojiUpResult.total}` : `\u5b8c\u6210: ${emojiUpResult.successCount}/${emojiUpResult.total} \u6210\u529f`}
+                          </p>
                           <div className="mt-2 space-y-1 max-h-48 overflow-y-auto rounded-md border border-gray-200 bg-white/70 p-2 font-mono">
+                            {emojiUpResult.status === "running" && emojiUpResult.results.length === 0 && <p className="text-xs text-blue-600">[START] \u6b63\u5728\u51c6\u5907\u4e0a\u4f20...</p>}
                             {emojiUpResult.results.map((result: any, index: number) => (
                               <p key={`${result.id}-${index}`} className={`text-xs ${result.success ? "text-green-700" : "text-red-600"}`}>
                                 [{result.success ? "SUCCESS" : "FAILED"}] {result.name}{result.error ? ` - ${result.error}` : ""}
