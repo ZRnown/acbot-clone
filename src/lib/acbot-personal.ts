@@ -63,6 +63,7 @@ export async function sendNavigationAsPersonalAccount(
       personalAccountId,
       targetChannelId,
       content: JSON.stringify(cards),
+      type: 10,
     }),
     cache: "no-store",
   });

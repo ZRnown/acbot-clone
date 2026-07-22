@@ -3,7 +3,7 @@ import {
   ServerTemplate,
 } from "./server-templates";
 
-type CreatedChannel = { id: string; name: string; type: number };
+type CreatedChannel = { id: string; name: string; type: number; inviteUrl?: string };
 
 type NavigationSkin = {
   title: (name: string) => string;
@@ -89,6 +89,7 @@ function findCreatedChannel(sourceName: string, channels: CreatedChannel[]) {
 }
 
 function channelReference(channel: CreatedChannel | undefined, fallbackName: string) {
+  if (channel?.type === 2 && channel.inviteUrl) return `[${channel.name}](${channel.inviteUrl})`;
   return channel
     ? `(chn)${channel.id}(chn)`
     : fallbackName;

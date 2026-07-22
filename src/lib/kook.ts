@@ -153,6 +153,15 @@ export async function deleteChannel(token: string, channelId: string): Promise<v
   });
 }
 
+export async function createInvite(token: string, channelId: string): Promise<string> {
+  const data = await kookRequest(token, "/invite/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ channel_id: channelId, duration: 0, setting_times: -1 }),
+  });
+  return data.url;
+}
+
 export async function sendCardMessage(
   token: string,
   channelId: string,

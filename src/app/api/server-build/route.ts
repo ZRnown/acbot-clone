@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, getBotById, getLinkedPersonalAccounts } from "@/lib/db";
 import { ALL_TEMPLATES, decorateCategoryName, ServerTemplate } from "@/lib/server-templates";
-import { createChannel, createEmoji, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
+import { createChannel, createEmoji, createInvite, deleteChannel, getAllChannelList, sendCardMessage, updateChannel } from "@/lib/kook";
 import { buildNavigationCard, splitNavigationCardMessages } from "@/lib/navigation-cards";
 import { getLibrary } from "@/lib/emoji-library";
 import fs from "fs";
@@ -58,13 +58,14 @@ function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
 
   if (!template) return undefined;
 
+  const configuredName = body.serverName?.trim() || template.name;
   const categories = template.categories
     .map((cat) => ({
-      name: cat.name?.trim(),
+      name: cat.name?.trim().replaceAll("XX\u7535\u7ade", configuredName),
       channels: (cat.channels || [])
         .map((ch) => ({
           ...ch,
-          name: ch.name?.trim(),
+          name: ch.name?.trim().replaceAll("XX\u7535\u7ade", configuredName),
           type: [1, 2, 4].includes(Number(ch.type)) ? Number(ch.type) : 1,
         }))
         .filter((ch) => ch.name),
@@ -75,7 +76,7 @@ function normalizeTemplate(body: BuildBody): ServerTemplate | undefined {
 }
 
 function getBuildDelayMs(duration: string | undefined, totalActions: number) {
-  if (!duration || duration === "fast") return 500;
+  if (!duration || duration === "fast") return 150;
 
   const minutes = Number(duration);
   if (!Number.isFinite(minutes) || minutes <= 0 || totalActions <= 0) return 500;
@@ -157,7 +158,7 @@ export async function POST(req: NextRequest) {
         let navigationSent = false;
         let emojisCreated = 0;
         const errors: string[] = [];
-        const createdChannels: { id: string; name: string; type: number }[] = [];
+        const createdChannels: { id: string; name: string; type: number; inviteUrl?: string }[] = [];
         const uploadedEmojiIds = new Map<string, string>();
 
         if (body.clearExisting !== false && existingChannels.length) {
@@ -236,6 +237,19 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        if (body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip") {
+          const voiceChannels = createdChannels.filter((channel) => channel.type === 2);
+          for (let index = 0; index < voiceChannels.length; index += 5) {
+            await Promise.all(voiceChannels.slice(index, index + 5).map(async (channel) => {
+              try {
+                channel.inviteUrl = await createInvite(bot.token, channel.id);
+              } catch {
+                // Voice links are optional; navigation falls back to the channel name.
+              }
+            }));
+          }
+        }
+
         if (Boolean(false) && body.navigationCardTemplateId && body.navigationCardTemplateId !== "skip") {
           const target = createdChannels.find((channel) => channel.type === 1)
             || createdChannels.find((channel) => channel.type === 4);
@@ -287,7 +301,7 @@ export async function POST(req: NextRequest) {
             errors.push(`\u88c5\u9970\u8868\u60c5 [${emoji.name}] \u4e0a\u4f20\u5931\u8d25: ${message}`);
           }
           progress.current++;
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          await new Promise((resolve) => setTimeout(resolve, Math.max(delayMs, 500)));
         }
 
         if (body.sourceEmojis?.length) {
@@ -310,7 +324,7 @@ export async function POST(req: NextRequest) {
               addLog("error", `\u8868\u60c5 [${emoji.name}] \u4e0a\u4f20\u5931\u8d25: ${message}`);
             }
             progress.current++;
-            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            await new Promise((resolve) => setTimeout(resolve, Math.max(delayMs, 500)));
           }
         }
 
