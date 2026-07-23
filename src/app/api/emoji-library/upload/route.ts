@@ -33,15 +33,18 @@ export async function POST(req: NextRequest) {
   const payload = token ? verifyToken(token) : null;
   if (!payload) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const { botId, guildId, emojiIds, namePrefix, names, clearExisting } = await req.json() as {
-      botId: string; guildId: string; emojiIds: string[]; namePrefix?: string; names?: Record<string, string>; clearExisting?: boolean;
+    const { botId, guildId, emojiIds, nameOverride, names, clearExisting } = await req.json() as {
+      botId: string; guildId: string; emojiIds: string[]; nameOverride?: string; names?: Record<string, string>; clearExisting?: boolean;
     };
     if (!botId || !guildId || !Array.isArray(emojiIds) || emojiIds.length === 0) {
       return NextResponse.json({ error: "Missing upload parameters" }, { status: 400 });
     }
     const bot = await getBotById(botId);
     if (!bot || bot.ownerId !== payload.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const selected = getLibrary().filter((emoji) => emojiIds.includes(emoji.id));
+    const selectionOrder = new Map(emojiIds.map((id, index) => [id, index]));
+    const selected = getLibrary()
+      .filter((emoji) => selectionOrder.has(emoji.id))
+      .sort((left, right) => (selectionOrder.get(left.id) || 0) - (selectionOrder.get(right.id) || 0));
     if (!selected.length) return NextResponse.json({ error: "No selected emojis found" }, { status: 400 });
 
     const jobId = `emoji_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -78,10 +81,14 @@ export async function POST(req: NextRequest) {
           job.logs.push({ level: "success", message: "目标服务器原有表情已全部删除" });
         }
         job.logs.push({ level: "info", message: `开始上传 ${selected.length} 个表情` });
-        for (const emoji of selected) {
+        for (const [index, emoji] of selected.entries()) {
+          const sequence = String(index + 1);
           let emojiName = names?.[emoji.id]?.trim() || emoji.name;
-          if (namePrefix) emojiName = `${namePrefix}${emojiName}`;
-          emojiName = emojiName.slice(0, 32);
+          if (nameOverride?.trim()) {
+            emojiName = `${nameOverride.trim().slice(0, 32 - sequence.length)}${sequence}`;
+          } else {
+            emojiName = emojiName.slice(0, 32);
+          }
           try {
             const filePath = path.join(process.cwd(), "public", "emoji-library", emoji.category, emoji.filename);
             if (!fs.existsSync(filePath)) throw new Error("File not found");

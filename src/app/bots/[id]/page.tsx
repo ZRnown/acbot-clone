@@ -95,7 +95,7 @@ export default function BotDetailPage() {
   const [emojiLoading, setEmojiLoading] = useState(false);
   const [emojiSelected, setEmojiSelected] = useState<Set<string>>(new Set());
   const [emojiUpGuildId, setEmojiUpGuildId] = useState("");
-  const [emojiPrefix, setEmojiPrefix] = useState("");
+  const [emojiNameOverride, setEmojiNameOverride] = useState("");
   const [emojiNames, setEmojiNames] = useState<Record<string, string>>({});
   const [emojiUploading, setEmojiUploading] = useState(false);
   const [emojiUpResult, setEmojiUpResult] = useState<any>(null);
@@ -451,7 +451,7 @@ export default function BotDetailPage() {
           botId: bot.id,
           guildId: emojiUpGuildId,
           emojiIds: Array.from(emojiSelected),
-          namePrefix: emojiPrefix || undefined,
+          nameOverride: emojiNameOverride || undefined,
           names: emojiNames,
           clearExisting: clearTargetEmojis,
         }),
@@ -934,9 +934,9 @@ export default function BotDetailPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-500 mb-1">名称前缀（可选）</label>
-                      <input type="text" value={emojiPrefix} onChange={(e) => setEmojiPrefix(e.target.value)} placeholder="例: mybot_"
-                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] w-32 focus:outline-none focus:border-blue-500" />
+                      <label className="block text-xs text-slate-500 mb-1">名称覆盖（可选）</label>
+                      <input type="text" value={emojiNameOverride} onChange={(e) => setEmojiNameOverride(e.target.value)} placeholder="例：测试 → 测试1、测试2…"
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm text-[#171d26] w-56 focus:outline-none focus:border-blue-500" />
                     </div>
                     <button onClick={uploadEmojis} disabled={emojiUploading || !emojiUpGuildId}
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition flex items-center gap-2">
